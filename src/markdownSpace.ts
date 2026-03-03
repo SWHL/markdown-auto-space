@@ -33,20 +33,21 @@ export function addSpacesBetweenChineseAndAlnum(
 
   let result = text
 
-  // 1. 保护 Markdown 图片语法 ![](url) 或 ![alt](url)，避免 URL 内 / 被加空格
+  // 1. 保护反引号包裹的 inline code（最高优先级，内部可为任意内容）
+  // 支持 1 个或多个反引号作为定界符：`code`、``a ` b`` 等
+  result = result.replace(/(`+)([\s\S]*?)\1/g, saveItem)
+
+  // 2. 保护 Markdown 图片语法 ![](url) 或 ![alt](url)，避免 URL 内 / 被加空格
   result = result.replace(/!\[[^\]]*\]\([^)]+\)/g, saveItem)
 
-  // 2. 保护 Markdown 链接 [text](url)
+  // 3. 保护 Markdown 链接 [text](url)
   result = result.replace(/\[([^\]]+)\]\(([^)]+)\)/g, saveItem)
 
-  // 3. 保护 HTML 标签
+  // 4. 保护 HTML 标签
   result = result.replace(/<\/?[a-zA-Z][^>]*>/g, saveItem)
 
-  // 4. 保护独立 URL
+  // 5. 保护独立 URL
   result = result.replace(/https?:\/\/[a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=%]+/g, saveItem)
-
-  // 5. 保护反引号包裹的 inline code（先于粗体，避免 `**text**` 内的 ** 被粗体规则替换成占位符）
-  result = result.replace(/`[^`]*`/g, saveItem)
 
   // 6. 保护引号中的内容，一律不参与后续空格规则
   result = result.replace(/"[^"]*"/g, saveItem)
@@ -111,19 +112,29 @@ export function addSpacesBetweenChineseAndAlnum(
     )
   }
 
-  // 恢复被保护的内容；Markdown 链接的文本部分用 addSpacesInText 再处理
+  // 恢复被保护的内容；支持嵌套占位符，循环恢复直到稳定，避免泄漏 __PROTECTED_x__
   const placeholderRegex = new RegExp(`${PROTECTED_PLACEHOLDER}(\\d+)__`, 'g')
-  result = result.replace(placeholderRegex, (_, indexStr) => {
-    const i = Number.parseInt(indexStr, 10)
-    let item = protectedItems[i]
-    const linkMatch = item.match(/^\[([^\]]+)\]\(([^)]+)\)$/)
-    // 仅对普通链接 [text](url) 处理链接文本中的空格，图片 ![alt](url) 原样恢复
-    if (linkMatch && !linkMatch[1].startsWith('!')) {
-      const [, linkText, linkUrl] = linkMatch
-      item = `[${addSpacesInText(linkText, options.chineseAlnum)}](${linkUrl})`
-    }
-    return item
-  })
+  function restoreOnePass(input: string): string {
+    return input.replace(placeholderRegex, (_, indexStr) => {
+      const i = Number.parseInt(indexStr, 10)
+      let item = protectedItems[i]
+      const linkMatch = item.match(/^\[([^\]]+)\]\(([^)]+)\)$/)
+      // 仅对普通链接 [text](url) 处理链接文本中的空格，图片 ![alt](url) 原样恢复
+      if (linkMatch && !linkMatch[1].startsWith('!')) {
+        const [, linkText, linkUrl] = linkMatch
+        item = `[${addSpacesInText(linkText, options.chineseAlnum)}](${linkUrl})`
+      }
+      return item
+    })
+  }
+
+  // 最多迭代 protectedItems.length + 1 次，足以展开所有嵌套，避免异常输入导致死循环
+  for (let pass = 0; pass <= protectedItems.length; pass += 1) {
+    const restored = restoreOnePass(result)
+    if (restored === result)
+      break
+    result = restored
+  }
 
   return result
 }
