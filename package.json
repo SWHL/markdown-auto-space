@@ -1,0 +1,120 @@
+{
+  "publisher": "SWHL",
+  "name": "markdown-auto-space",
+  "displayName": "Markdown Auto Space",
+  "version": "0.0.2",
+  "private": true,
+  "packageManager": "pnpm@9.14.1",
+  "description": "Auto add space between Chinese and English in Markdown when you save file",
+  "author": "SWHL<liekkaskono@163.com>",
+  "license": "MIT",
+  "homepage": "https://github.com/SWHL",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SWHL/markdown-auto-space.git"
+  },
+  "bugs": {
+    "url": "https://github.com/SWHL/markdown-auto-space.git/issues"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./dist/index.js",
+  "icon": "res/icon.jpg",
+  "engines": {
+    "vscode": "^1.69.0"
+  },
+  "activationEvents": [
+    "onStartupFinished",
+    "onLanguage"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "extension.markdownAutoSpace",
+        "title": "Markdown Auto Space"
+      }
+    ],
+    "configuration": {
+      "title": "Markdown Auto Space configuration",
+      "properties": {
+        "markdownAutoSpace.formatOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Execute auto add space when on file save"
+        },
+        "markdownAutoSpace.formatOnDocument": {
+          "type": "boolean",
+          "default": false,
+          "description": "Execute add space on Format Document command"
+        },
+        "markdownAutoSpace.spaceType": {
+          "type": "string",
+          "default": "all",
+          "enum": [
+            "all",
+            "comment"
+          ],
+          "description": "Markdown Auto Space's type"
+        },
+        "markdownAutoSpace.rules": {
+          "type": "object",
+          "description": "Enable or disable each space rule (like markdownlint). All default to true.",
+          "properties": {
+            "chineseAlnum": {
+              "type": "boolean",
+              "default": true,
+              "description": "Add space between Chinese and English/numbers (e.g. 中文English -> 中文 English)"
+            },
+            "chineseBacktick": {
+              "type": "boolean",
+              "default": true,
+              "description": "Add space between Chinese and `inline code`"
+            },
+            "chineseLinkUrl": {
+              "type": "boolean",
+              "default": true,
+              "description": "Add space between Chinese and links/URLs"
+            },
+            "dunhaoToComma": {
+              "type": "boolean",
+              "default": true,
+              "description": "Replace Chinese dunhao (、) with comma+space (, ) when between English/numbers"
+            },
+            "slashSpace": {
+              "type": "boolean",
+              "default": true,
+              "description": "Add space around slash (/) (e.g.  A/B -> A / B)"
+            }
+          }
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --external vscode",
+    "dev": "nr build --watch",
+    "lint": "eslint . --fix",
+    "vscode:prepublish": "nr build",
+    "publish": "vsce publish --no-dependencies",
+    "pack": "vsce package --no-dependencies",
+    "test": "vitest",
+    "typecheck": "tsc --noEmit",
+    "release": "bumpp && nr publish"
+  },
+  "devDependencies": {
+    "@antfu/ni": "^0.23.1",
+    "@types/node": "^22.9.1",
+    "@types/vscode": "^1.69.0",
+    "@vscode/vsce": "^3.2.1",
+    "bumpp": "^9.8.1",
+    "eslint": "9.14.0",
+    "pnpm": "^9.14.1",
+    "rimraf": "^6.0.1",
+    "talljack-eslint-config": "^0.2.6",
+    "tsup": "^8.3.5",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11",
+    "vitest": "^2.1.5"
+  }
+}
