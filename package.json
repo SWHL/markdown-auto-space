@@ -2,7 +2,7 @@
   "publisher": "SWHL",
   "name": "markdown-auto-space",
   "displayName": "Markdown Auto Space",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "private": true,
   "packageManager": "pnpm@9.14.1",
   "description": "Auto add space between Chinese and English in Markdown when you save file",
@@ -32,16 +32,61 @@
     "commands": [
       {
         "command": "extension.markdownAutoSpace",
-        "title": "Markdown Auto Space"
+        "title": "Markdown Auto Space: 对当前文档执行中英文加空格"
+      },
+      {
+        "command": "extension.markdownAutoSpaceFormatSelection",
+        "title": "Markdown Auto Space: 仅格式化选中行/选区"
       }
     ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "extension.markdownAutoSpace",
+          "when": "editorLangId == markdown"
+        },
+        {
+          "command": "extension.markdownAutoSpaceFormatSelection",
+          "when": "editorLangId == markdown"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "extension.markdownAutoSpace",
+          "when": "editorLangId == markdown",
+          "group": "1_modification"
+        },
+        {
+          "command": "extension.markdownAutoSpaceFormatSelection",
+          "when": "editorLangId == markdown",
+          "group": "1_modification"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "extension.markdownAutoSpace",
+          "when": "editorLangId == markdown",
+          "group": "1_modification"
+        },
+        {
+          "command": "extension.markdownAutoSpaceFormatSelection",
+          "when": "editorLangId == markdown",
+          "group": "1_modification"
+        }
+      ]
+    },
     "configuration": {
       "title": "Markdown Auto Space configuration",
       "properties": {
+        "markdownAutoSpace.diagnostics.enable": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show diagnostics (squiggles) where space rules are violated (e.g. MAS001: 中英文之间应有空格)"
+        },
         "markdownAutoSpace.formatOnSave": {
           "type": "boolean",
           "default": true,
-          "description": "Execute auto add space when on file save"
+          "description": "Apply space rules when you manually save (e.g. Ctrl+S). Does not run on auto-save, so diagnostics (squiggles) stay until you save."
         },
         "markdownAutoSpace.formatOnDocument": {
           "type": "boolean",
@@ -59,32 +104,32 @@
         },
         "markdownAutoSpace.rules": {
           "type": "object",
-          "description": "Enable or disable each space rule (like markdownlint). All default to true.",
+          "description": "Enable or disable each space rule by code (MAS001–MAS005). All default to true. See docs/RULES.md.",
           "properties": {
-            "chineseAlnum": {
+            "MAS001": {
               "type": "boolean",
               "default": true,
-              "description": "Add space between Chinese and English/numbers (e.g. 中文English -> 中文 English)"
+              "description": "中英文/数字之间应有空格"
             },
-            "chineseBacktick": {
+            "MAS002": {
               "type": "boolean",
               "default": true,
-              "description": "Add space between Chinese and `inline code`"
+              "description": "中文与行内代码（反引号）之间应有空格"
             },
-            "chineseLinkUrl": {
+            "MAS003": {
               "type": "boolean",
               "default": true,
-              "description": "Add space between Chinese and links/URLs"
+              "description": "中文与链接/URL 之间应有空格"
             },
-            "dunhaoToComma": {
+            "MAS004": {
               "type": "boolean",
               "default": true,
-              "description": "Replace Chinese dunhao (、) with comma+space (, ) when between English/numbers"
+              "description": "英文/数字间的顿号应改为逗号+空格"
             },
-            "slashSpace": {
+            "MAS005": {
               "type": "boolean",
               "default": true,
-              "description": "Add space around slash (/) (e.g.  A/B -> A / B)"
+              "description": "斜杠与中文之间应有空格"
             }
           }
         }

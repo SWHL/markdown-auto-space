@@ -2,6 +2,29 @@
 
 本文档记录本项目的所有重要变更，格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [0.0.3] - 2026-03-04
+
+### 新增
+
+- **诊断（规则提示）**：在编辑器中对违反「中英文加空格」等规则的位置显示波浪线，悬停可见规则码与说明（类似 markdownlint 的 MD022）。可通过 `markdownAutoSpace.diagnostics.enable` 开关。
+- **诊断规则码可点击**：悬停时规则码（如 MAS001）为链接，点击跳转到 [docs/RULES.md](./docs/RULES.md) 对应规则说明。
+- **规则码 MAS001–MAS005**：与诊断对应，配置中规则开关改为使用规则码（如 `MAS005: false`），见 [docs/RULES.md](./docs/RULES.md)。
+- **VSCode 命令**：支持通过命令面板、编辑器标题右键、编辑区右键执行「Markdown Auto Space: 对当前文档执行中英文加空格」。
+- **仅格式化选中**：新命令「Markdown Auto Space: 仅格式化选中行/选区」——选中多行时只对选区加空格，未选中时格式化当前光标所在行。
+- **规则说明文档**：[docs/RULES.md](./docs/RULES.md) 单独列出 MAS001–MAS005 的说明、示例与配置方式。
+
+### 变更
+
+- **配置键**：`markdownAutoSpace.rules` 仅支持规则码 MAS001–MAS005，不再兼容旧键名（chineseAlnum、slashSpace 等）。
+- **保存时修复**：仅在你**手动保存**（如 Ctrl+S）时执行加空格，自动保存、失焦保存不触发，避免编辑时内容被自动改掉。
+- **README**：规则详细说明与示例移至 [docs/RULES.md](./docs/RULES.md)，README 仅保留概述与导向。
+
+### 修复
+
+- 文档中含字面量 `__PROTECTED_数字__`（如 `__PROTECTED_99__`）且索引越界时，`restoreOnePass` 中 `item` 为 `undefined` 导致 `TypeError: Cannot read properties of undefined (reading 'match')`，现已修复并原样保留该字面量。
+
+---
+
 ## [0.0.2] - 2025-03-03
 
 ### 新增

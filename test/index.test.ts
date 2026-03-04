@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { processMarkdownContent } from '../src/markdownSpace'
+import { DEFAULT_MARKDOWN_SPACE_RULES, getRuleDocUrl, MANUAL_SAVE_REASON, normalizeRules, RULES_DOC_BASE_URL, shouldRunFormatOnSave } from '../src/type'
 
 /** 单条用例: [用例描述, 输入, 期望输出]（描述放首位便于 it.each 显示测试名） */
 type CaseRow = [description: string, input: string, expected: string]
@@ -95,8 +96,13 @@ const PROCESS_MARKDOWN_CASES: CaseRow[] = [
   ['链接+title 引号内不处理', '这是一个链接[Markdown语法](https://markdown.com.cn "最好的markdown教程")。', '这是一个链接 [Markdown 语法](https://markdown.com.cn "最好的markdown教程")。'],
 ]
 
+/** 占位符字面量：文档中含 __PROTECTED_数字__ 且索引越界时不应报错，原样保留（修复 restoreOnePass 中 item 为 undefined 导致 .match 报错） */
+const LITERAL_PLACEHOLDER_CASES: CaseRow[] = [
+  ['字面量 __PROTECTED_99__ 索引越界时原样保留不报错', '文档中含__PROTECTED_99__字面量时不应报错', '文档中含 __PROTECTED_99__ 字面量时不应报错'],
+]
+
 /** 合并为全部用例（用于统一 it.each） */
-const ALL_CASES: CaseRow[] = [...TEST_MDSPACING_CASES, ...PROCESS_MARKDOWN_CASES]
+const ALL_CASES: CaseRow[] = [...TEST_MDSPACING_CASES, ...PROCESS_MARKDOWN_CASES, ...LITERAL_PLACEHOLDER_CASES]
 
 // ---------------------------------------------------------------------------
 // 测试
@@ -105,5 +111,91 @@ const ALL_CASES: CaseRow[] = [...TEST_MDSPACING_CASES, ...PROCESS_MARKDOWN_CASES
 describe('processMarkdownContent', () => {
   it.each(ALL_CASES)('%s', (_description, input, expected) => {
     expect(processMarkdownContent(input)).toBe(expected)
+  })
+})
+
+describe('normalizeRules', () => {
+  it('无配置时返回默认规则', () => {
+    expect(normalizeRules(undefined)).toEqual(DEFAULT_MARKDOWN_SPACE_RULES)
+  })
+
+  it('MAS005: false 映射为 slashSpace: false', () => {
+    const rules = normalizeRules({ MAS005: false })
+    expect(rules.slashSpace).toBe(false)
+    expect(rules.chineseAlnum).toBe(true)
+  })
+
+  it('MAS001: false 映射为 chineseAlnum: false', () => {
+    const rules = normalizeRules({ MAS001: false })
+    expect(rules.chineseAlnum).toBe(false)
+    expect(rules.slashSpace).toBe(true)
+  })
+
+  it('多条规则可同时关闭', () => {
+    const rules = normalizeRules({ MAS001: false, MAS004: false, MAS005: false })
+    expect(rules.chineseAlnum).toBe(false)
+    expect(rules.dunhaoToComma).toBe(false)
+    expect(rules.slashSpace).toBe(false)
+    expect(rules.chineseBacktick).toBe(true)
+    expect(rules.chineseLinkUrl).toBe(true)
+  })
+
+  it('未知键名不参与合并', () => {
+    const rules = normalizeRules({ unknownKey: false, MAS005: false })
+    expect(rules.slashSpace).toBe(false)
+    expect((rules as Record<string, unknown>)['unknownKey']).toBeUndefined()
+  })
+})
+
+describe('processMarkdownContent with custom rules', () => {
+  it('MAS005 关闭时斜杠两侧不加空格', () => {
+    const rules = { ...DEFAULT_MARKDOWN_SPACE_RULES, slashSpace: false }
+    expect(processMarkdownContent('构建/工具等', rules)).toBe('构建/工具等')
+  })
+
+  it('MAS001 关闭时中英文之间不加空格', () => {
+    const rules = { ...DEFAULT_MARKDOWN_SPACE_RULES, chineseAlnum: false }
+    expect(processMarkdownContent('中文English混排', rules)).toBe('中文English混排')
+  })
+
+  it('MAS004 关闭时顿号不改为逗号', () => {
+    const rules = { ...DEFAULT_MARKDOWN_SPACE_RULES, dunhaoToComma: false }
+    expect(processMarkdownContent('支持Python、Java、C++', rules)).toBe('支持 Python、Java、C++')
+  })
+})
+
+describe('shouldRunFormatOnSave', () => {
+  it('仅手动保存（Manual=1）时返回 true', () => {
+    expect(shouldRunFormatOnSave(MANUAL_SAVE_REASON)).toBe(true)
+    expect(shouldRunFormatOnSave(1)).toBe(true)
+  })
+
+  it('自动保存（AfterDelay=2）时返回 false', () => {
+    expect(shouldRunFormatOnSave(2)).toBe(false)
+  })
+
+  it('失焦保存（FocusOut=3）时返回 false', () => {
+    expect(shouldRunFormatOnSave(3)).toBe(false)
+  })
+
+  it('其他 reason 返回 false', () => {
+    expect(shouldRunFormatOnSave(0)).toBe(false)
+    expect(shouldRunFormatOnSave(4)).toBe(false)
+  })
+})
+
+describe('getRuleDocUrl', () => {
+  it('返回规则说明文档 base URL + 小写规则码锚点', () => {
+    expect(getRuleDocUrl('MAS001')).toBe(`${RULES_DOC_BASE_URL}#mas001`)
+    expect(getRuleDocUrl('MAS005')).toBe(`${RULES_DOC_BASE_URL}#mas005`)
+  })
+
+  it('规则码转为小写作为锚点', () => {
+    expect(getRuleDocUrl('MAS002')).toContain('#mas002')
+    expect(getRuleDocUrl('MAS002')).toBe(RULES_DOC_BASE_URL + '#mas002')
+  })
+
+  it('RULES_DOC_BASE_URL 指向仓库 docs/RULES.md', () => {
+    expect(RULES_DOC_BASE_URL).toBe('https://github.com/SWHL/markdown-auto-space/blob/HEAD/docs/RULES.md')
   })
 })

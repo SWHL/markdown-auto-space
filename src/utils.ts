@@ -1,9 +1,9 @@
 // import type { TextEditorEdit } from 'vscode'
 import type { TextDocument } from 'vscode'
-import { Range, TextEdit, window as Window, workspace as Workspace } from 'vscode'
-import { processMarkdownContent } from './markdownSpace'
+import { Diagnostic, DiagnosticSeverity, Range, TextEdit, Uri, window as Window, workspace as Workspace } from 'vscode'
+import { addSpacesBetweenChineseAndAlnum, getMarkdownSpaceViolations, processMarkdownContent } from './markdownSpace'
 import type { AutoSpaceConfigType, MarkdownSpaceRulesType } from './type'
-import { DEFAULT_MARKDOWN_SPACE_RULES } from './type'
+import { DEFAULT_MARKDOWN_SPACE_RULES, getRuleDocUrl, normalizeRules } from './type'
 
 /**
  *
@@ -14,9 +14,7 @@ export function getMarkdownAutoSpaceConfig(): AutoSpaceConfigType {
   const formatOnDocument = config.get('formatOnDocument') as boolean
   const spaceType = config.get('spaceType') as AutoSpaceConfigType['spaceType']
   const rulesRaw = config.get('rules') as Record<string, boolean> | undefined
-  const rules: MarkdownSpaceRulesType = rulesRaw
-    ? { ...DEFAULT_MARKDOWN_SPACE_RULES, ...rulesRaw }
-    : DEFAULT_MARKDOWN_SPACE_RULES
+  const rules = normalizeRules(rulesRaw)
   return {
     formatOnSave,
     formatOnDocument,
@@ -47,6 +45,68 @@ export function getMarkdownAutoSpaceEdits(
     document.positionAt(text.length),
   )
   return [TextEdit.replace(fullRange, updatedText)]
+}
+
+/**
+ * 仅对选中范围（或单行）做加空格，用于「格式化选中」命令。按行处理，不依赖全文代码块上下文。
+ */
+export function getMarkdownAutoSpaceEditsForRange(
+  document: TextDocument,
+  range: Range,
+): TextEdit[] | undefined {
+  if (!shouldProcessFile(document))
+    return undefined
+  const text = document.getText(range)
+  if (!text.length)
+    return undefined
+  const { rules } = getMarkdownAutoSpaceConfig()
+  const lines = text.split('\n')
+  const formatted = lines.map(line => addSpacesBetweenChineseAndAlnum(line, rules ?? DEFAULT_MARKDOWN_SPACE_RULES))
+  const newText = formatted.join('\n')
+  if (newText === text)
+    return undefined
+  return [TextEdit.replace(range, newText)]
+}
+
+/**
+ * 计算当前文档的「加空格」规则诊断（类似 markdownlint 的 MD022 等）
+ * 仅对 Markdown 文档且配置开启时返回
+ */
+export function getMarkdownAutoSpaceDiagnostics(
+  document: TextDocument,
+  text: string,
+): Diagnostic[] {
+  if (!shouldProcessFile(document))
+    return []
+  const config = Workspace.getConfiguration('markdownAutoSpace')
+  const diagnosticsEnabled = config.get('diagnostics.enable') as boolean | undefined
+  if (diagnosticsEnabled === false)
+    return []
+
+  const { rules } = getMarkdownAutoSpaceConfig()
+  const violations = getMarkdownSpaceViolations(text, rules ?? DEFAULT_MARKDOWN_SPACE_RULES)
+  const diagnostics: Diagnostic[] = []
+  for (const v of violations) {
+    if (v.lineIndex >= document.lineCount)
+      continue
+    const line = document.lineAt(v.lineIndex)
+    const range = new Range(
+      line.range.start.translate(0, v.start),
+      line.range.start.translate(0, Math.min(v.start + v.length, line.text.length)),
+    )
+    const diagnostic = new Diagnostic(
+      range,
+      `${v.message} [${v.code}]`,
+      DiagnosticSeverity.Information,
+    )
+    diagnostic.code = {
+      value: v.code,
+      target: Uri.parse(getRuleDocUrl(v.code)),
+    }
+    diagnostic.source = 'markdown-auto-space'
+    diagnostics.push(diagnostic)
+  }
+  return diagnostics
 }
 
 /**

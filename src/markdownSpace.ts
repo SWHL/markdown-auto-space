@@ -15,6 +15,81 @@ const DEFAULT_RULES: MarkdownSpaceRulesType = {
   slashSpace: true,
 }
 
+/** 规则码与说明（用于诊断提示，类似 markdownlint 的 MDxxx） */
+export const RULE_DIAGNOSTIC_MAP: Record<keyof MarkdownSpaceRulesType, { code: string, message: string }> = {
+  chineseAlnum: { code: 'MAS001', message: '中英文/数字之间应有空格' },
+  chineseBacktick: { code: 'MAS002', message: '中文与行内代码（反引号）之间应有空格' },
+  chineseLinkUrl: { code: 'MAS003', message: '中文与链接/URL 之间应有空格' },
+  dunhaoToComma: { code: 'MAS004', message: '英文/数字间的顿号应改为逗号+空格' },
+  slashSpace: { code: 'MAS005', message: '斜杠与中文之间应有空格' },
+}
+
+/**
+ * 比较原始行与处理后行，找出「插入空格」的位置（在原始行中的起始下标，高亮两字符）
+ */
+function findInsertionRanges(original: string, output: string): number[] {
+  const starts: number[] = []
+  let i = 0
+  let j = 0
+  while (i < original.length && j < output.length) {
+    if (original[i] === output[j]) {
+      i++
+      j++
+      continue
+    }
+    if (output[j] === ' ' && original[i] !== ' ') {
+      const start = i > 0 ? i - 1 : i
+      starts.push(start)
+      j++
+      continue
+    }
+    i++
+    j++
+  }
+  return starts
+}
+
+/**
+ * 对单行检测违反规则的位置，返回用于诊断的区间与规则信息（仅对当前启用的规则）
+ */
+export function getLineViolations(
+  line: string,
+  rules: MarkdownSpaceRulesType,
+): { start: number, length: number, ruleId: keyof MarkdownSpaceRulesType, code: string, message: string }[] {
+  const violations: { start: number, length: number, ruleId: keyof MarkdownSpaceRulesType, code: string, message: string }[] = []
+  const ruleKeys = (Object.keys(rules) as (keyof MarkdownSpaceRulesType)[]).filter(k => rules[k])
+  const seenStarts = new Set<number>()
+  for (const ruleId of ruleKeys) {
+    const onlyThisRule: MarkdownSpaceRulesType = {
+      chineseAlnum: false,
+      chineseBacktick: false,
+      chineseLinkUrl: false,
+      dunhaoToComma: false,
+      slashSpace: false,
+      [ruleId]: true,
+    }
+    const output = addSpacesBetweenChineseAndAlnum(line, onlyThisRule)
+    const starts = findInsertionRanges(line, output)
+    const meta = RULE_DIAGNOSTIC_MAP[ruleId]
+    for (const start of starts) {
+      if (seenStarts.has(start))
+        continue
+      seenStarts.add(start)
+      const length = Math.min(2, line.length - start)
+      if (length <= 0)
+        continue
+      violations.push({
+        start,
+        length,
+        ruleId,
+        code: meta.code,
+        message: meta.message,
+      })
+    }
+  }
+  return violations
+}
+
 /**
  * 在中文和数字/英文之间添加空格（单行处理）
  * 先保护 Markdown 链接、HTML 标签、URL、**粗体**，处理后再恢复
@@ -115,9 +190,12 @@ export function addSpacesBetweenChineseAndAlnum(
   // 恢复被保护的内容；支持嵌套占位符，循环恢复直到稳定，避免泄漏 __PROTECTED_x__
   const placeholderRegex = new RegExp(`${PROTECTED_PLACEHOLDER}(\\d+)__`, 'g')
   function restoreOnePass(input: string): string {
-    return input.replace(placeholderRegex, (_, indexStr) => {
+    return input.replace(placeholderRegex, (fullMatch, indexStr) => {
       const i = Number.parseInt(indexStr, 10)
       let item = protectedItems[i]
+      // 文档中可能含有字面量 __PROTECTED_0__ 等，导致索引越界，原样保留避免报错
+      if (item === undefined)
+        return fullMatch
       const linkMatch = item.match(/^\[([^\]]+)\]\(([^)]+)\)$/)
       // 仅对普通链接 [text](url) 处理链接文本中的空格，图片 ![alt](url) 原样恢复
       if (linkMatch && !linkMatch[1].startsWith('!')) {
@@ -212,4 +290,58 @@ export function processMarkdownContent(
   }
 
   return newLines.join('\n')
+}
+
+/** 单条诊断项（行、列、规则、文案），供扩展层转成 vscode.Diagnostic */
+export interface MarkdownSpaceViolation {
+  lineIndex: number
+  start: number
+  length: number
+  ruleId: keyof MarkdownSpaceRulesType
+  code: string
+  message: string
+}
+
+/**
+ * 对整篇 Markdown 做与 processMarkdownContent 相同的行过滤，收集所有违规位置
+ */
+export function getMarkdownSpaceViolations(
+  content: string,
+  rules: MarkdownSpaceRulesType = DEFAULT_RULES,
+): MarkdownSpaceViolation[] {
+  const lines = content.split('\n')
+  const out: MarkdownSpaceViolation[] = []
+  let inCodeBlock = false
+  let inYamlFrontMatter = false
+  let yamlFrontMatterCount = 0
+
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+    const line = lines[lineIndex]
+    if (line.trim() === '---') {
+      yamlFrontMatterCount += 1
+      if (yamlFrontMatterCount <= 2)
+        inYamlFrontMatter = yamlFrontMatterCount === 1
+    }
+    if (line.trim().startsWith('```')) {
+      inCodeBlock = !inCodeBlock
+      continue
+    }
+    if (inCodeBlock || inYamlFrontMatter)
+      continue
+    if (/^(\t|    )/.test(line))
+      continue
+
+    const lineViolations = getLineViolations(line, rules)
+    for (const v of lineViolations) {
+      out.push({
+        lineIndex,
+        start: v.start,
+        length: v.length,
+        ruleId: v.ruleId,
+        code: v.code,
+        message: v.message,
+      })
+    }
+  }
+  return out
 }
