@@ -26,7 +26,7 @@
 
 ## 安装
 
-在 VS Code 扩展市场搜索 **Markdown Auto Space**，或运行：
+支持 **VS Code 桌面版** 与 **Web 版**（[vscode.dev](https://vscode.dev)、[github.dev](https://github.dev)）。在对应环境的扩展市场搜索 **Markdown Auto Space**，或桌面版运行：
 
 ```bash
 code --install-extension SWHL.markdown-auto-space

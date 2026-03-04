@@ -2,6 +2,14 @@
 
 本文档记录本项目的所有重要变更，格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [0.0.4] - 2026-03-04
+
+### 新增
+
+- **Web 端支持**：扩展现支持 VS Code for the Web（如 [vscode.dev](https://vscode.dev)、[github.dev](https://github.dev)），可在网页版扩展市场中安装使用，功能与桌面版一致。
+
+---
+
 ## [0.0.3] - 2026-03-04
 
 ### 新增

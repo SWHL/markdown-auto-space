@@ -2,7 +2,7 @@
   "publisher": "SWHL",
   "name": "markdown-auto-space",
   "displayName": "Markdown Auto Space",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "private": true,
   "packageManager": "pnpm@9.14.1",
   "description": "Auto add space between Chinese and English in Markdown when you save file",
@@ -20,6 +20,7 @@
     "Other"
   ],
   "main": "./dist/index.js",
+  "browser": "./dist/web/extension.js",
   "icon": "res/icon.jpg",
   "engines": {
     "vscode": "^1.69.0"
@@ -138,14 +139,22 @@
   },
   "scripts": {
     "build": "tsup src/index.ts --external vscode",
+    "build:web": "node scripts/build-web.mjs",
     "dev": "nr build --watch",
     "lint": "eslint . --fix",
-    "vscode:prepublish": "nr build",
+    "vscode:prepublish": "nr build && nr build:web",
     "publish": "vsce publish --no-dependencies",
     "pack": "vsce package --no-dependencies",
     "test": "vitest",
     "typecheck": "tsc --noEmit",
     "release": "bumpp && nr publish"
+  },
+  "pnpm": {
+    "peerDependencyRules": {
+      "allowedVersions": {
+        "eslint": "9"
+      }
+    }
   },
   "devDependencies": {
     "@antfu/ni": "^0.23.1",
@@ -153,6 +162,7 @@
     "@types/vscode": "^1.69.0",
     "@vscode/vsce": "^3.2.1",
     "bumpp": "^9.8.1",
+    "esbuild": "^0.24.0",
     "eslint": "9.14.0",
     "pnpm": "^9.14.1",
     "rimraf": "^6.0.1",
