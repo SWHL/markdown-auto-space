@@ -39,7 +39,7 @@ export function getMarkdownAutoSpaceEdits(
     return undefined
 
   const { rules } = getMarkdownAutoSpaceConfig()
-  const updatedText = processMarkdownContent(text, rules ?? DEFAULT_MARKDOWN_SPACE_RULES)
+  const updatedText = processMarkdownContent(text, rules)
   const fullRange = new Range(
     document.positionAt(0),
     document.positionAt(text.length),
@@ -61,7 +61,7 @@ export function getMarkdownAutoSpaceEditsForRange(
     return undefined
   const { rules } = getMarkdownAutoSpaceConfig()
   const lines = text.split('\n')
-  const formatted = lines.map(line => addSpacesBetweenChineseAndAlnum(line, rules ?? DEFAULT_MARKDOWN_SPACE_RULES))
+  const formatted = lines.map(line => addSpacesBetweenChineseAndAlnum(line, rules))
   const newText = formatted.join('\n')
   if (newText === text)
     return undefined
@@ -84,7 +84,7 @@ export function getMarkdownAutoSpaceDiagnostics(
     return []
 
   const { rules } = getMarkdownAutoSpaceConfig()
-  const violations = getMarkdownSpaceViolations(text, rules ?? DEFAULT_MARKDOWN_SPACE_RULES)
+  const violations = getMarkdownSpaceViolations(text, rules)
   const diagnostics: Diagnostic[] = []
   for (const v of violations) {
     if (v.lineIndex >= document.lineCount)
@@ -121,7 +121,7 @@ export function markdownAutoSpace(text: string) {
     return
 
   const { rules } = getMarkdownAutoSpaceConfig()
-  const updatedText = processMarkdownContent(text, rules ?? DEFAULT_MARKDOWN_SPACE_RULES)
+  const updatedText = processMarkdownContent(text, rules)
   const fullRange = new Range(
     document.positionAt(0),
     document.positionAt(text.length),

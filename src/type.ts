@@ -39,12 +39,12 @@ export function normalizeRules(rulesRaw: Record<string, boolean> | undefined): M
   return rules
 }
 
-/** 扩展配置（从 VS Code 读取） */
+/** 扩展配置（从 VS Code 读取）；rules 由 normalizeRules 填充为完整对象 */
 export interface AutoSpaceConfigType {
   formatOnSave: boolean
   formatOnDocument: boolean
   spaceType: 'all' | 'comment'
-  rules?: Partial<MarkdownSpaceRulesType>
+  rules: MarkdownSpaceRulesType
 }
 
 /**

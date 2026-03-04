@@ -143,7 +143,7 @@ describe('normalizeRules', () => {
   it('未知键名不参与合并', () => {
     const rules = normalizeRules({ unknownKey: false, MAS005: false })
     expect(rules.slashSpace).toBe(false)
-    expect((rules as Record<string, unknown>)['unknownKey']).toBeUndefined()
+    expect((rules as unknown as Record<string, unknown>)['unknownKey']).toBeUndefined()
   })
 })
 

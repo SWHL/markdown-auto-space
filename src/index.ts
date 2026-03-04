@@ -101,10 +101,11 @@ export function activate(context: vscode.ExtensionContext) {
       void vscode.window.showWarningMessage('Markdown Auto Space: 仅支持 Markdown 文件。')
       return
     }
-    let range = editor.selection
-    if (range.isEmpty)
-      range = document.lineAt(range.start.line).range
-    const edits = getMarkdownAutoSpaceEditsForRange(document, range)
+    const selection = editor.selection
+    const rangeToFormat: vscode.Range = selection.isEmpty
+      ? document.lineAt(selection.start.line).range
+      : new vscode.Range(selection.start, selection.end)
+    const edits = getMarkdownAutoSpaceEditsForRange(document, rangeToFormat)
     if (!edits?.length) {
       log('  选中内容无需修改')
       void vscode.window.showInformationMessage('Markdown Auto Space: 选中内容无需修改。')
