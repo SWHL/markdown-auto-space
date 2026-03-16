@@ -48,26 +48,26 @@ code --install-extension SWHL.markdown-auto-space
 
 开启 `markdownAutoSpace.diagnostics.enable` 后，在 Markdown 中违反「中英文加空格」等规则的位置会显示波浪线，悬停可见规则码与说明，例如：
 
-- **MAS001**：中英文/数字之间应有空格
+- **MAS001**：中英文 / 数字之间应有空格
 - **MAS002**：中文与行内代码（反引号）之间应有空格
-- **MAS003**：中文与链接/URL 之间应有空格
-- **MAS004**：英文/数字间的顿号应改为逗号+空格
+- **MAS003**：中文与链接 /URL 之间应有空格
+- **MAS004**：英文 / 数字间的顿号应改为逗号+ 空格
 - **MAS005**：斜杠与中文之间应有空格
 
-与 markdownlint 的 MD022 等提示方式一致；悬停时规则码（如 MAS001）可点击，跳转到 [规则说明文档](./docs/RULES.md) 对应条目。可逐处修改，或使用「Markdown Auto Space」命令整篇/选中区一键修复。
+与 markdownlint 的 MD022 等提示方式一致；悬停时规则码（如 MAS001）可点击，跳转到 [规则说明文档](./docs/RULES.md) 对应条目。可逐处修改，或使用「Markdown Auto Space」命令整篇 / 选中区一键修复。
 
 ## 运行命令
 
 除保存时自动加空格外，可手动执行 **Markdown Auto Space** 对当前文档加空格：
 
-- **整篇格式化**：命令面板输入「Markdown Auto Space」或从编辑器标题/右键菜单选择「Markdown Auto Space: 对当前文档执行中英文加空格」。
-- **仅格式化选中**：选中一行或多行后，命令面板输入「Markdown Auto Space 格式化选中」或从菜单选择「Markdown Auto Space: 仅格式化选中行/选区」；未选中时则格式化当前光标所在行。
+- **整篇格式化**：命令面板输入「Markdown Auto Space」或从编辑器标题 / 右键菜单选择「Markdown Auto Space: 对当前文档执行中英文加空格」。
+- **仅格式化选中**：选中一行或多行后，命令面板输入「Markdown Auto Space 格式化选中」或从菜单选择「Markdown Auto Space: 仅格式化选中行 / 选区」；未选中时则格式化当前光标所在行。
 
 未打开 Markdown 文件或当前文件不是 Markdown 时，运行命令会给出提示。
 
 ## 规则说明与示例
 
-规则码 MAS001–MAS005 的说明、输入/输出示例及配置方式见 **[规则说明文档](./docs/RULES.md)**。
+规则码 MAS001–MAS005 的说明、输入 / 输出示例及配置方式见 **[规则说明文档](./docs/RULES.md)**。
 
 ## 其他行为说明
 
@@ -113,6 +113,12 @@ code --install-extension SWHL.markdown-auto-space
 ## 更新日志
 
 更多版本与改动见 [CHANGELOG](./CHANGELOG.md)。
+
+## 参考资料
+
+- [vscode-auto-space](https://github.com/Talljack/vscode-auto-space)
+- [autocorrect](https://github.com/huacnlee/autocorrect)
+- [markdownlint](https://github.com/DavidAnson/markdownlint)
 
 ## 许可证
 
