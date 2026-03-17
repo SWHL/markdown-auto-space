@@ -4,6 +4,14 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  jwa: '>=1.4.2'
+
+patchedDependencies:
+  buffer-equal-constant-time@1.0.1:
+    hash: 6updm5nybrstv55wh3qwk6gpte
+    path: patches/buffer-equal-constant-time@1.0.1.patch
+
 importers:
 
   .:
@@ -2097,9 +2105,6 @@ packages:
     resolution: {integrity: sha512-ZZow9HBI5O6EPgSJLUb8n2NKgmVWTwCvHGwFuJlMjvLFqlGG6pjirPhtdsseaLZjSibD8eegzmYpUZwoIlj2cQ==}
     engines: {node: '>=4.0'}
 
-  jwa@1.4.1:
-    resolution: {integrity: sha512-qiLX/xhEEFKUAJ6FiBMbes3w9ATzyk5W7Hvzpa/SLYdxNtng+gcurvrI7TbACjIXlsJyr05/S1oUhZrc63evQA==}
-
   jwa@2.0.0:
     resolution: {integrity: sha512-jrZ2Qx916EA+fq9cEAeCROWPTfCwi1IVHqT2tapuqLEVVDKFDENFw1oL+MwrTvH6msKxsd1YTDVw6uKEcsrLEA==}
 
@@ -4146,7 +4151,7 @@ snapshots:
 
   buffer-crc32@0.2.13: {}
 
-  buffer-equal-constant-time@1.0.1: {}
+  buffer-equal-constant-time@1.0.1(patch_hash=6updm5nybrstv55wh3qwk6gpte): {}
 
   buffer@5.7.1:
     dependencies:
@@ -5402,21 +5407,15 @@ snapshots:
       object.assign: 4.1.5
       object.values: 1.2.0
 
-  jwa@1.4.1:
-    dependencies:
-      buffer-equal-constant-time: 1.0.1
-      ecdsa-sig-formatter: 1.0.11
-      safe-buffer: 5.2.1
-
   jwa@2.0.0:
     dependencies:
-      buffer-equal-constant-time: 1.0.1
+      buffer-equal-constant-time: 1.0.1(patch_hash=6updm5nybrstv55wh3qwk6gpte)
       ecdsa-sig-formatter: 1.0.11
       safe-buffer: 5.2.1
 
   jws@3.2.2:
     dependencies:
-      jwa: 1.4.1
+      jwa: 2.0.0
       safe-buffer: 5.2.1
 
   jws@4.0.0:

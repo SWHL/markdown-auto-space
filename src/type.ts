@@ -3,6 +3,7 @@ export interface MarkdownSpaceRulesType {
   chineseAlnum: boolean
   chineseBacktick: boolean
   chineseLinkUrl: boolean
+  chineseLinkText: boolean
   dunhaoToComma: boolean
   slashSpace: boolean
 }
@@ -11,21 +12,23 @@ export const DEFAULT_MARKDOWN_SPACE_RULES: MarkdownSpaceRulesType = {
   chineseAlnum: true,
   chineseBacktick: true,
   chineseLinkUrl: true,
+  chineseLinkText: true,
   dunhaoToComma: true,
   slashSpace: true,
 }
 
-/** 配置中的规则码（MAS001–MAS005）与内部规则键的映射 */
+/** 配置中的规则码（MAS001–MAS006）与内部规则键的映射 */
 export const MAS_CODE_TO_RULE_KEY: Record<string, keyof MarkdownSpaceRulesType> = {
   MAS001: 'chineseAlnum',
   MAS002: 'chineseBacktick',
   MAS003: 'chineseLinkUrl',
   MAS004: 'dunhaoToComma',
   MAS005: 'slashSpace',
+  MAS006: 'chineseLinkText',
 }
 
 /**
- * 将配置中的规则（MAS001–MAS005）转为内部 MarkdownSpaceRulesType（可用于测试或扩展内读取配置）
+ * 将配置中的规则（MAS001–MAS006）转为内部 MarkdownSpaceRulesType（可用于测试或扩展内读取配置）
  */
 export function normalizeRules(rulesRaw: Record<string, boolean> | undefined): MarkdownSpaceRulesType {
   if (!rulesRaw)

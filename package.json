@@ -2,7 +2,7 @@
   "publisher": "SWHL",
   "name": "markdown-auto-space",
   "displayName": "Markdown Auto Space",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "private": true,
   "packageManager": "pnpm@9.14.1",
   "description": "Auto add space between Chinese and English in Markdown when you save file",
@@ -105,7 +105,7 @@
         },
         "markdownAutoSpace.rules": {
           "type": "object",
-          "description": "Enable or disable each space rule by code (MAS001–MAS005). All default to true. See docs/RULES.md.",
+          "description": "Enable or disable each space rule by code (MAS001–MAS006). All default to true. See docs/RULES.md.",
           "properties": {
             "MAS001": {
               "type": "boolean",
@@ -131,6 +131,11 @@
               "type": "boolean",
               "default": true,
               "description": "斜杠与中文之间应有空格"
+            },
+            "MAS006": {
+              "type": "boolean",
+              "default": true,
+              "description": "超链接 [] 内中英文混排时英文左右应有空格"
             }
           }
         }
@@ -154,6 +159,12 @@
       "allowedVersions": {
         "eslint": "9"
       }
+    },
+    "overrides": {
+      "jwa": ">=1.4.2"
+    },
+    "patchedDependencies": {
+      "buffer-equal-constant-time@1.0.1": "patches/buffer-equal-constant-time@1.0.1.patch"
     }
   },
   "devDependencies": {

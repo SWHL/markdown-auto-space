@@ -34,6 +34,7 @@ const TEST_MDSPACING_CASES: CaseRow[] = [
   ['多个语言用顿号', '支持C++、Java、Python语言', '支持 C++, Java, Python 语言'],
   ['URL左侧加空格', '访问https://github.com/RapidAI/RapidOCR项目', '访问 https://github.com/RapidAI/RapidOCR 项目'],
   ['Markdown链接文本加空格', '查看[RapidOCR文档](https://rapidai.github.io/RapidOCRDocs)', '查看 [RapidOCR 文档](https://rapidai.github.io/RapidOCRDocs)'],
+  ['链接[]内中英文混排英文左右加空格', '[配置自动移除未使用的import](https://stackoverflow.com/questions/53352135/is-there-a-way-to-remove-unused-imports-for-python-in-vs-code)', '[配置自动移除未使用的 import](https://stackoverflow.com/questions/53352135/is-there-a-way-to-remove-unused-imports-for-python-in-vs-code)'],
   ['URL左右都要加空格', '网址http://example.com/test后续内容', '网址 http://example.com/test 后续内容'],
   ['URL左右都加空格', '项目地址https://github.com/RapidAI/RapidOCR欢迎访问', '项目地址 https://github.com/RapidAI/RapidOCR 欢迎访问'],
   ['粗体左右加空格', '这是**重要内容**说明', '这是 **重要内容** 说明'],
@@ -132,10 +133,11 @@ describe('normalizeRules', () => {
   })
 
   it('多条规则可同时关闭', () => {
-    const rules = normalizeRules({ MAS001: false, MAS004: false, MAS005: false })
+    const rules = normalizeRules({ MAS001: false, MAS004: false, MAS005: false, MAS006: false })
     expect(rules.chineseAlnum).toBe(false)
     expect(rules.dunhaoToComma).toBe(false)
     expect(rules.slashSpace).toBe(false)
+    expect(rules.chineseLinkText).toBe(false)
     expect(rules.chineseBacktick).toBe(true)
     expect(rules.chineseLinkUrl).toBe(true)
   })
@@ -161,6 +163,12 @@ describe('processMarkdownContent with custom rules', () => {
   it('MAS004 关闭时顿号不改为逗号', () => {
     const rules = { ...DEFAULT_MARKDOWN_SPACE_RULES, dunhaoToComma: false }
     expect(processMarkdownContent('支持Python、Java、C++', rules)).toBe('支持 Python、Java、C++')
+  })
+
+  it('MAS006 关闭时链接 [] 内中英文不加空格', () => {
+    const rules = { ...DEFAULT_MARKDOWN_SPACE_RULES, chineseLinkText: false }
+    expect(processMarkdownContent('[配置自动移除未使用的import](https://example.com)', rules))
+      .toBe('[配置自动移除未使用的import](https://example.com)')
   })
 })
 
@@ -193,6 +201,10 @@ describe('getRuleDocUrl', () => {
   it('规则码转为小写作为锚点', () => {
     expect(getRuleDocUrl('MAS002')).toContain('#mas002')
     expect(getRuleDocUrl('MAS002')).toBe(RULES_DOC_BASE_URL + '#mas002')
+  })
+
+  it('MAS006 锚点为 mas006', () => {
+    expect(getRuleDocUrl('MAS006')).toBe(`${RULES_DOC_BASE_URL}#mas006`)
   })
 
   it('RULES_DOC_BASE_URL 指向仓库 docs/RULES.md', () => {

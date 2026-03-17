@@ -11,6 +11,7 @@ const DEFAULT_RULES: MarkdownSpaceRulesType = {
   chineseAlnum: true,
   chineseBacktick: true,
   chineseLinkUrl: true,
+  chineseLinkText: true,
   dunhaoToComma: true,
   slashSpace: true,
 }
@@ -20,6 +21,7 @@ export const RULE_DIAGNOSTIC_MAP: Record<keyof MarkdownSpaceRulesType, { code: s
   chineseAlnum: { code: 'MAS001', message: '中英文/数字之间应有空格' },
   chineseBacktick: { code: 'MAS002', message: '中文与行内代码（反引号）之间应有空格' },
   chineseLinkUrl: { code: 'MAS003', message: '中文与链接/URL 之间应有空格' },
+  chineseLinkText: { code: 'MAS006', message: '超链接 [] 内中英文混排时英文左右应有空格' },
   dunhaoToComma: { code: 'MAS004', message: '英文/数字间的顿号应改为逗号+空格' },
   slashSpace: { code: 'MAS005', message: '斜杠与中文之间应有空格' },
 }
@@ -64,6 +66,7 @@ export function getLineViolations(
       chineseAlnum: false,
       chineseBacktick: false,
       chineseLinkUrl: false,
+      chineseLinkText: false,
       dunhaoToComma: false,
       slashSpace: false,
       [ruleId]: true,
@@ -197,10 +200,10 @@ export function addSpacesBetweenChineseAndAlnum(
       if (item === undefined)
         return fullMatch
       const linkMatch = item.match(/^\[([^\]]+)\]\(([^)]+)\)$/)
-      // 仅对普通链接 [text](url) 处理链接文本中的空格，图片 ![alt](url) 原样恢复
+      // 仅对普通链接 [text](url) 处理链接文本中的空格（MAS006），图片 ![alt](url) 原样恢复
       if (linkMatch && !linkMatch[1].startsWith('!')) {
         const [, linkText, linkUrl] = linkMatch
-        item = `[${addSpacesInText(linkText, options.chineseAlnum)}](${linkUrl})`
+        item = `[${addSpacesInText(linkText, options.chineseLinkText)}](${linkUrl})`
       }
       return item
     })

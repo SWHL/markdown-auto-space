@@ -40,7 +40,7 @@ code --install-extension SWHL.markdown-auto-space
 | `markdownAutoSpace.formatOnSave`          | `true`  | `boolean`           | 仅在你手动保存（如 Ctrl+S）时加空格，自动保存不触发 |
 | `markdownAutoSpace.formatOnDocument`      | `false` | `boolean`           | 执行「格式化文档」时加空格            |
 | `markdownAutoSpace.spaceType`             | `'all'` | `'all' | 'comment'` | 作用范围（当前为全部内容）            |
-| `markdownAutoSpace.rules`                 | 见 [RULES.md](./docs/RULES.md) | `object` | 各条规则的开关（MAS001–MAS005），未写出的规则默认为 `true` |
+| `markdownAutoSpace.rules`                 | 见 [RULES.md](./docs/RULES.md) | `object` | 各条规则的开关（MAS001–MAS006），未写出的规则默认为 `true` |
 
 本扩展仅处理 **Markdown** 文件（语言 ID 为 `markdown`），不处理 txt 等其他类型。
 
@@ -53,6 +53,7 @@ code --install-extension SWHL.markdown-auto-space
 - **MAS003**：中文与链接 /URL 之间应有空格
 - **MAS004**：英文 / 数字间的顿号应改为逗号+ 空格
 - **MAS005**：斜杠与中文之间应有空格
+- **MAS006**：超链接 [] 内中英文混排时英文左右应有空格
 
 与 markdownlint 的 MD022 等提示方式一致；悬停时规则码（如 MAS001）可点击，跳转到 [规则说明文档](./docs/RULES.md) 对应条目。可逐处修改，或使用「Markdown Auto Space」命令整篇 / 选中区一键修复。
 
@@ -67,7 +68,7 @@ code --install-extension SWHL.markdown-auto-space
 
 ## 规则说明与示例
 
-规则码 MAS001–MAS005 的说明、输入 / 输出示例及配置方式见 **[规则说明文档](./docs/RULES.md)**。
+规则码 MAS001–MAS006 的说明、输入 / 输出示例及配置方式见 **[规则说明文档](./docs/RULES.md)**。自 v0.0.5 起新增 **MAS006**：Markdown 超链接文本（`[]` 内）中英文混排时自动在英文左右加空格。
 
 ## 其他行为说明
 

@@ -1,6 +1,6 @@
 # Markdown Auto Space 规则说明
 
-本扩展在编辑器中会以规则码（MAS001–MAS005）标注违反处，与 markdownlint 的 MDxxx 用法一致。下表为规则码与配置键、说明的对应关系。
+本扩展在编辑器中会以规则码（MAS001–MAS006）标注违反处，与 markdownlint 的 MDxxx 用法一致。下表为规则码与配置键、说明的对应关系。
 
 | 规则码 | 配置键（`markdownAutoSpace.rules`） | 说明 |
 |--------|-----------------------------------|------|
@@ -9,6 +9,7 @@
 | **MAS003** | `MAS003` | 中文与链接/URL 之间应有空格 |
 | **MAS004** | `MAS004` | 英文/数字间的顿号应改为逗号+空格 |
 | **MAS005** | `MAS005` | 斜杠与中文之间应有空格 |
+| **MAS006** | `MAS006` | 超链接 [] 内中英文混排时英文左右应有空格 |
 
 在 VS Code 中开启 `markdownAutoSpace.diagnostics.enable` 后，违反上述规则的位置会显示波浪线，悬停可看到规则码与说明。
 
@@ -53,7 +54,7 @@
 
 ## MAS003 — chineseLinkUrl：中文与链接/URL 之间加空格
 
-在中文与 Markdown 链接、裸 URL 之间插入空格；链接或 URL 本身会被保护，仅在其与中文的边界加空格。链接文本内的中英文仍按 MAS001 处理。
+在中文与 Markdown 链接、裸 URL 之间插入空格；链接或 URL 本身会被保护，仅在其与中文的边界加空格。链接文本（`[]` 内）的中英文混排由 **MAS006** 处理。
 
 | 输入 | 输出 |
 |------|------|
@@ -96,6 +97,21 @@
 | `切换到release/v3.0分支` | `切换到 release/v3.0 分支` |
 
 配置键：`markdownAutoSpace.rules.MAS005`，默认 `true`。
+
+---
+
+<a id="mas006"></a>
+
+## MAS006 — chineseLinkText：超链接 [] 内中英文混排时英文左右加空格
+
+在 Markdown 超链接的文本部分（方括号 `[]` 内）出现中英文混排时，在中文与英文/数字之间插入空格。
+
+| 输入 | 输出 |
+|------|------|
+| `[配置自动移除未使用的import](https://example.com)` | `[配置自动移除未使用的 import](https://example.com)` |
+| `[查看RapidOCR文档](https://rapidai.github.io/RapidOCRDocs)` | `[查看 RapidOCR 文档](https://rapidai.github.io/RapidOCRDocs)` |
+
+配置键：`markdownAutoSpace.rules.MAS006`，默认 `true`。
 
 ---
 
