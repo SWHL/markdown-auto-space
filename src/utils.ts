@@ -2,8 +2,8 @@
 import type { TextDocument } from 'vscode'
 import { Diagnostic, DiagnosticSeverity, Range, TextEdit, Uri, window as Window, workspace as Workspace } from 'vscode'
 import { addSpacesBetweenChineseAndAlnum, getMarkdownSpaceViolations, processMarkdownContent } from './markdownSpace'
-import type { AutoSpaceConfigType, MarkdownSpaceRulesType } from './type'
-import { DEFAULT_MARKDOWN_SPACE_RULES, getRuleDocUrl, normalizeRules } from './type'
+import type { AutoSpaceConfigType } from './type'
+import { getRuleDocUrl, normalizeRules } from './type'
 
 /**
  *
@@ -23,13 +23,18 @@ export function getMarkdownAutoSpaceConfig(): AutoSpaceConfigType {
   }
 }
 
-/** 仅对 Markdown 语言的文件处理 */
+/**
+ * 仅对 Markdown 语言的文件处理
+ * @param document
+ */
 export function shouldProcessFile(document: TextDocument): boolean {
   return document.languageId === 'markdown'
 }
 
 /**
  * 根据文档与文本计算加空格后的编辑（不依赖当前焦点编辑器），用于保存时应用。
+ * @param document
+ * @param text
  */
 export function getMarkdownAutoSpaceEdits(
   document: TextDocument,
@@ -49,6 +54,8 @@ export function getMarkdownAutoSpaceEdits(
 
 /**
  * 仅对选中范围（或单行）做加空格，用于「格式化选中」命令。按行处理，不依赖全文代码块上下文。
+ * @param document
+ * @param range
  */
 export function getMarkdownAutoSpaceEditsForRange(
   document: TextDocument,
@@ -71,6 +78,8 @@ export function getMarkdownAutoSpaceEditsForRange(
 /**
  * 计算当前文档的「加空格」规则诊断（类似 markdownlint 的 MD022 等）
  * 仅对 Markdown 文档且配置开启时返回
+ * @param document
+ * @param text
  */
 export function getMarkdownAutoSpaceDiagnostics(
   document: TextDocument,
@@ -111,6 +120,7 @@ export function getMarkdownAutoSpaceDiagnostics(
 
 /**
  * 对当前活动编辑器的文档执行加空格并返回编辑（供命令/格式化使用）。
+ * @param text
  */
 export function markdownAutoSpace(text: string) {
   const editor = Window.activeTextEditor

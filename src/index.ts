@@ -1,6 +1,6 @@
 import * as vscode from 'vscode'
 import type { Disposable } from 'vscode'
-import { getMarkdownAutoSpaceEdits, getMarkdownAutoSpaceEditsForRange, getMarkdownAutoSpaceConfig, getMarkdownAutoSpaceDiagnostics } from './utils'
+import { getMarkdownAutoSpaceConfig, getMarkdownAutoSpaceDiagnostics, getMarkdownAutoSpaceEdits, getMarkdownAutoSpaceEditsForRange } from './utils'
 import { shouldRunFormatOnSave } from './type'
 
 let markdownAutoSpaceListener: Disposable
@@ -9,12 +9,17 @@ let outputChannel: vscode.OutputChannel
 let diagnosticCollection: vscode.DiagnosticCollection
 let diagnosticsDebounceTimer: ReturnType<typeof setTimeout> | undefined
 
+/**
+ *
+ * @param msg
+ */
 function log(msg: string) {
   outputChannel?.appendLine(`[${new Date().toISOString()}] ${msg}`)
 }
 
 /**
  * 对文档执行加空格并应用编辑（保存时或格式化时调用）
+ * @param document
  */
 async function formatDocument(document: vscode.TextDocument) {
   try {
@@ -166,6 +171,10 @@ export function activate(context: vscode.ExtensionContext) {
   diagnosticCollection = vscode.languages.createDiagnosticCollection('markdown-auto-space')
   context.subscriptions.push(diagnosticCollection)
 
+  /**
+   *
+   * @param doc
+   */
   function updateDiagnostics(doc: vscode.TextDocument) {
     if (doc.languageId !== 'markdown')
       return
@@ -202,7 +211,10 @@ export function deactivate() {
   configurationListener?.dispose()
 }
 
-/** 仅对 Markdown 语言的文件处理 */
+/**
+ * 仅对 Markdown 语言的文件处理
+ * @param document
+ */
 function shouldProcessFile(document: vscode.TextDocument) {
   return document.languageId === 'markdown'
 }

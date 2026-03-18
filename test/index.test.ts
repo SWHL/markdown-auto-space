@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { processMarkdownContent } from '../src/markdownSpace'
-import { DEFAULT_MARKDOWN_SPACE_RULES, getRuleDocUrl, MANUAL_SAVE_REASON, normalizeRules, RULES_DOC_BASE_URL, shouldRunFormatOnSave } from '../src/type'
+import {
+  applyDigitUnitSpace,
+  applyNoSpaceAroundCjkPunct,
+  applyTightDegreePercent,
+  getLineViolations,
+  getMarkdownSpaceViolations,
+  processMarkdownContent,
+  shouldSkipLine,
+} from '../src/markdownSpace'
+import { DEFAULT_MARKDOWN_SPACE_RULES, MANUAL_SAVE_REASON, RULES_DOC_BASE_URL, getRuleDocUrl, normalizeRules, shouldRunFormatOnSave } from '../src/type'
+import type { MarkdownSpaceRulesType } from '../src/type'
 
 /** 单条用例: [用例描述, 输入, 期望输出]（描述放首位便于 it.each 显示测试名） */
 type CaseRow = [description: string, input: string, expected: string]
@@ -102,8 +111,20 @@ const LITERAL_PLACEHOLDER_CASES: CaseRow[] = [
   ['字面量 __PROTECTED_99__ 索引越界时原样保留不报错', '文档中含__PROTECTED_99__字面量时不应报错', '文档中含 __PROTECTED_99__ 字面量时不应报错'],
 ]
 
+/** MAS007–MAS009：对齐中文文案排版指北空格小节 */
+const ZHIBEI_SPACE_CASES: CaseRow[] = [
+  ['MAS007 数字与单位 Gbps', '我家的光纤入户宽带有10Gbps', '我家的光纤入户宽带有 10 Gbps'],
+  ['MAS007 数字与单位 TB', 'SSD一共有20TB容量', 'SSD 一共有 20 TB 容量'],
+  ['MAS007 小数与单位', '主频2.5GHz够用', '主频 2.5 GHz 够用'],
+  ['MAS008 百分号紧凑', '新MacBook有15 %的CPU提升', '新 MacBook 有 15% 的 CPU 提升'],
+  ['MAS008 度数紧凑', '角度为90 °的角', '角度为 90° 的角'],
+  ['MAS009 逗号前空格', '买了iPhone ，好开心', '买了 iPhone，好开心'],
+  ['MAS009 逗号后空格', '今天出去， 很开心', '今天出去，很开心'],
+  ['MAS009 与链接文本内 MAS007', '[网速10Gbps说明](https://example.com)', '[网速 10 Gbps 说明](https://example.com)'],
+]
+
 /** 合并为全部用例（用于统一 it.each） */
-const ALL_CASES: CaseRow[] = [...TEST_MDSPACING_CASES, ...PROCESS_MARKDOWN_CASES, ...LITERAL_PLACEHOLDER_CASES]
+const ALL_CASES: CaseRow[] = [...TEST_MDSPACING_CASES, ...PROCESS_MARKDOWN_CASES, ...LITERAL_PLACEHOLDER_CASES, ...ZHIBEI_SPACE_CASES]
 
 // ---------------------------------------------------------------------------
 // 测试
@@ -118,6 +139,12 @@ describe('processMarkdownContent', () => {
 describe('normalizeRules', () => {
   it('无配置时返回默认规则', () => {
     expect(normalizeRules(undefined)).toEqual(DEFAULT_MARKDOWN_SPACE_RULES)
+  })
+
+  it('MAS007–MAS009 配置映射', () => {
+    expect(normalizeRules({ MAS007: false }).digitUnitSpace).toBe(false)
+    expect(normalizeRules({ MAS008: false }).tightDegreePercent).toBe(false)
+    expect(normalizeRules({ MAS009: false }).noSpaceAroundCjkPunct).toBe(false)
   })
 
   it('MAS005: false 映射为 slashSpace: false', () => {
@@ -145,7 +172,7 @@ describe('normalizeRules', () => {
   it('未知键名不参与合并', () => {
     const rules = normalizeRules({ unknownKey: false, MAS005: false })
     expect(rules.slashSpace).toBe(false)
-    expect((rules as unknown as Record<string, unknown>)['unknownKey']).toBeUndefined()
+    expect((rules as unknown as Record<string, unknown>).unknownKey).toBeUndefined()
   })
 })
 
@@ -169,6 +196,21 @@ describe('processMarkdownContent with custom rules', () => {
     const rules = { ...DEFAULT_MARKDOWN_SPACE_RULES, chineseLinkText: false }
     expect(processMarkdownContent('[配置自动移除未使用的import](https://example.com)', rules))
       .toBe('[配置自动移除未使用的import](https://example.com)')
+  })
+
+  it('MAS007 关闭时不插入数字与单位间空格', () => {
+    const rules: MarkdownSpaceRulesType = { ...DEFAULT_MARKDOWN_SPACE_RULES, digitUnitSpace: false }
+    expect(processMarkdownContent('宽带有10Gbps', rules)).toBe('宽带有 10Gbps')
+  })
+
+  it('MAS008 关闭时保留百分号前空格', () => {
+    const rules: MarkdownSpaceRulesType = { ...DEFAULT_MARKDOWN_SPACE_RULES, tightDegreePercent: false }
+    expect(processMarkdownContent('有15 %提升', rules)).toBe('有 15 % 提升')
+  })
+
+  it('MAS009 关闭时保留全形逗号旁空格', () => {
+    const rules: MarkdownSpaceRulesType = { ...DEFAULT_MARKDOWN_SPACE_RULES, noSpaceAroundCjkPunct: false }
+    expect(processMarkdownContent('买了iPhone ，好', rules)).toBe('买了 iPhone ，好')
   })
 })
 
@@ -207,7 +249,126 @@ describe('getRuleDocUrl', () => {
     expect(getRuleDocUrl('MAS006')).toBe(`${RULES_DOC_BASE_URL}#mas006`)
   })
 
+  it('MAS007–MAS009 锚点', () => {
+    expect(getRuleDocUrl('MAS007')).toBe(`${RULES_DOC_BASE_URL}#mas007`)
+    expect(getRuleDocUrl('MAS009')).toBe(`${RULES_DOC_BASE_URL}#mas009`)
+  })
+
   it('RULES_DOC_BASE_URL 指向仓库 docs/RULES.md', () => {
     expect(RULES_DOC_BASE_URL).toBe('https://github.com/SWHL/markdown-auto-space/blob/HEAD/docs/RULES.md')
+  })
+})
+
+describe('applyDigitUnitSpace', () => {
+  it('数字与 Gbps/TB 等单位之间插入空格', () => {
+    expect(applyDigitUnitSpace('有10Gbps和20TB')).toBe('有10 Gbps和20 TB')
+  })
+  it('已有空格则不再插入', () => {
+    expect(applyDigitUnitSpace('带宽 10 Gbps')).toBe('带宽 10 Gbps')
+  })
+  it('字母紧贴数字不拆（如 Python3）', () => {
+    expect(applyDigitUnitSpace('Python3与10Gbps')).toBe('Python3与10 Gbps')
+  })
+})
+
+describe('applyTightDegreePercent', () => {
+  it('去掉数字与 ° % 间空格并保证 % 后接中文有空格', () => {
+    expect(applyTightDegreePercent('15 %的')).toBe('15% 的')
+    expect(applyTightDegreePercent('90 °的角')).toBe('90° 的角')
+  })
+  it('全角％同样处理', () => {
+    expect(applyTightDegreePercent('50 ％完成')).toBe('50％ 完成')
+  })
+})
+
+describe('applyNoSpaceAroundCjkPunct', () => {
+  it('全形逗号两侧去空格', () => {
+    expect(applyNoSpaceAroundCjkPunct('a ，b')).toBe('a，b')
+    expect(applyNoSpaceAroundCjkPunct('好， 耶')).toBe('好，耶')
+  })
+  it('不在【前删空格', () => {
+    expect(applyNoSpaceAroundCjkPunct('log 【注】')).toBe('log 【注】')
+  })
+})
+
+describe('getLineViolations', () => {
+  const allOn = DEFAULT_MARKDOWN_SPACE_RULES
+
+  it('MAS007：数字与单位粘连时报违规', () => {
+    const v = getLineViolations('正文10Gbps结束', allOn)
+    expect(v.some(x => x.code === 'MAS007')).toBe(true)
+  })
+  it('MAS008：数字与 % 间有空格时报违规', () => {
+    const v = getLineViolations('增长15 %的', allOn)
+    expect(v.some(x => x.code === 'MAS008')).toBe(true)
+  })
+  it('MAS009：全形逗号前有空格时报违规', () => {
+    const v = getLineViolations('买了iPhone ，好', allOn)
+    expect(v.some(x => x.code === 'MAS009')).toBe(true)
+  })
+  it('行内代码内 10Gbps 不报 MAS007', () => {
+    const v = getLineViolations('使用`10Gbps`测试', allOn)
+    expect(v.filter(x => x.code === 'MAS007')).toHaveLength(0)
+  })
+  it('关闭 MAS007 时不报 MAS007', () => {
+    const v = getLineViolations('正文10Gbps', { ...allOn, digitUnitSpace: false })
+    expect(v.filter(x => x.code === 'MAS007')).toHaveLength(0)
+  })
+  it('空行无违规', () => {
+    expect(getLineViolations('', allOn)).toHaveLength(0)
+  })
+})
+
+describe('getMarkdownSpaceViolations', () => {
+  it('多行分别收集行号', () => {
+    const content = '第一行10Gbps\n普通行\n第三行15 %的'
+    const v = getMarkdownSpaceViolations(content, DEFAULT_MARKDOWN_SPACE_RULES)
+    const lines = new Set(v.map(x => x.lineIndex))
+    expect(lines.has(0)).toBe(true)
+    expect(lines.has(2)).toBe(true)
+  })
+  it('围栏代码块内不扫描', () => {
+    const content = '```\n10Gbps\n```\n正文10Gbps'
+    const v = getMarkdownSpaceViolations(content, DEFAULT_MARKDOWN_SPACE_RULES)
+    const mas007 = v.filter(x => x.code === 'MAS007')
+    expect(mas007.every(x => x.lineIndex === 3)).toBe(true)
+  })
+})
+
+describe('shouldSkipLine', () => {
+  it('YAML 分隔线与围栏行视为跳过（由 processMarkdownContent 处理）', () => {
+    expect(shouldSkipLine('---')).toBe(true)
+    expect(shouldSkipLine('```ts')).toBe(true)
+  })
+})
+
+describe('DEFAULT_MARKDOWN_SPACE_RULES', () => {
+  it('包含 MAS001–MAS009 对应键且默认开启', () => {
+    expect(DEFAULT_MARKDOWN_SPACE_RULES).toMatchObject({
+      chineseAlnum: true,
+      digitUnitSpace: true,
+      tightDegreePercent: true,
+      noSpaceAroundCjkPunct: true,
+    })
+  })
+})
+
+describe('processMarkdownContent 组合规则', () => {
+  it('MAS006 关闭时链接文本仍应用 MAS007', () => {
+    const rules: MarkdownSpaceRulesType = {
+      ...DEFAULT_MARKDOWN_SPACE_RULES,
+      chineseLinkText: false,
+    }
+    expect(processMarkdownContent('[速率10Gbps](https://x.com)', rules))
+      .toBe('[速率10 Gbps](https://x.com)')
+  })
+  it('同时关闭 MAS007 MAS008 MAS009', () => {
+    const rules: MarkdownSpaceRulesType = {
+      ...DEFAULT_MARKDOWN_SPACE_RULES,
+      digitUnitSpace: false,
+      tightDegreePercent: false,
+      noSpaceAroundCjkPunct: false,
+    }
+    expect(processMarkdownContent('10Gbps， 15 %', rules)).toBe('10Gbps， 15 %')
   })
 })

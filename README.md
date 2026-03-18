@@ -4,13 +4,22 @@
 
 # Markdown Auto Space
 
-> 在保存或格式化时，自动为 Markdown 中的中英文之间添加空格。
+> 在保存或格式化时，按可配置规则整理 Markdown 中的空格（中英混排、[中文文案排版指北](https://github.com/sparanoid/chinese-copywriting-guidelines)空格相关约定等）。
 
 [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=SWHL.markdown-auto-space)
 
 ## 概述
 
-中文与英文、数字混排时，在两者之间增加空格可提升可读性。本扩展在 VS Code 中针对 **Markdown** 文件，在保存或执行「格式化文档」时自动应用一套可配置的规则，对中英文、数字、链接、行内代码、斜杠等之间插入或规范化空格。
+中文与英文、数字混排时增加空格可提升可读性。本扩展在 VS Code 中针对 **Markdown** 文件，在**手动保存**或（可选）「格式化文档」时应用 **MAS001–MAS009** 共九条规则，例如：
+
+| 方向 | 规则码 | 简述 |
+|------|--------|------|
+| 中英与数字边界 | MAS001–MAS006 | 中英文/数字、反引号、链接与 URL、顿号、斜杠、`[]` 内混排等 |
+| 数字与单位 | **MAS007** | `10Gbps` → `10 Gbps`，`20TB` → `20 TB` |
+| 度与百分号 | **MAS008** | `15 %`、`90 °` → `15%`、`90°`，且 `%`/`°` 后接中文时保留空格 |
+| 全形标点旁 | **MAS009** | 去掉 `，`、`。` 等旁多余 ASCII 空格（不破坏 `log 【` 类写法） |
+
+每条规则均可单独关闭，说明与示例见 **[docs/RULES.md](./docs/RULES.md)**。
 
 处理时会 **保护** 以下内容不被破坏，仅在其与中文的边界加空格：
 
@@ -40,7 +49,7 @@ code --install-extension SWHL.markdown-auto-space
 | `markdownAutoSpace.formatOnSave`          | `true`  | `boolean`           | 仅在你手动保存（如 Ctrl+S）时加空格，自动保存不触发 |
 | `markdownAutoSpace.formatOnDocument`      | `false` | `boolean`           | 执行「格式化文档」时加空格            |
 | `markdownAutoSpace.spaceType`             | `'all'` | `'all' | 'comment'` | 作用范围（当前为全部内容）            |
-| `markdownAutoSpace.rules`                 | 见 [RULES.md](./docs/RULES.md) | `object` | 各条规则的开关（MAS001–MAS006），未写出的规则默认为 `true` |
+| `markdownAutoSpace.rules`                 | 见 [RULES.md](./docs/RULES.md) | `object` | 各条规则的开关（MAS001–MAS009），未写出的规则默认为 `true` |
 
 本扩展仅处理 **Markdown** 文件（语言 ID 为 `markdown`），不处理 txt 等其他类型。
 
@@ -51,9 +60,12 @@ code --install-extension SWHL.markdown-auto-space
 - **MAS001**：中英文 / 数字之间应有空格
 - **MAS002**：中文与行内代码（反引号）之间应有空格
 - **MAS003**：中文与链接 /URL 之间应有空格
-- **MAS004**：英文 / 数字间的顿号应改为逗号+ 空格
+- **MAS004**：英文 / 数字间的顿号应改为逗号加空格
 - **MAS005**：斜杠与中文之间应有空格
 - **MAS006**：超链接 [] 内中英文混排时英文左右应有空格
+- **MAS007**：数字与单位之间应有空格（如 10 Gbps、20 TB）
+- **MAS008**：度数、百分号与数字之间不应有空格
+- **MAS009**：全形句读标点旁不应有空格
 
 与 markdownlint 的 MD022 等提示方式一致；悬停时规则码（如 MAS001）可点击，跳转到 [规则说明文档](./docs/RULES.md) 对应条目。可逐处修改，或使用「Markdown Auto Space」命令整篇 / 选中区一键修复。
 
@@ -68,7 +80,7 @@ code --install-extension SWHL.markdown-auto-space
 
 ## 规则说明与示例
 
-规则码 MAS001–MAS006 的说明、输入 / 输出示例及配置方式见 **[规则说明文档](./docs/RULES.md)**。自 v0.0.5 起新增 **MAS006**：Markdown 超链接文本（`[]` 内）中英文混排时自动在英文左右加空格。
+规则码 MAS001–MAS009 的说明、输入 / 输出示例及配置方式见 **[规则说明文档](./docs/RULES.md)**（含与[中文文案排版指北](https://github.com/sparanoid/chinese-copywriting-guidelines)空格小节的对照）。**MAS007–MAS009** 对应指北中的数字与单位、度/百分号、全形标点旁空格等规则。
 
 ## 其他行为说明
 
@@ -86,20 +98,35 @@ code --install-extension SWHL.markdown-auto-space
   例：`已经有 空格 的文本` 保持不变。
 - **句号前**：英文 / 数字后的中文句号前不会加空格。
   例：`RapidOCR。这是句号` 保持不变。
+- **MAS007（数字与单位）**：正文与超链接 `[]` 内文本均会处理（单位表见 RULES.md）。
+  例：`宽带有10Gbps` → `宽带有 10 Gbps`。
+- **MAS008（度 / 百分号）**：收紧数字与符号间空格，并与后续中文留白。
+  例：`15 %的` → `15% 的`；`90 °的角` → `90° 的角`。
+- **MAS009（全形标点）**：如 `iPhone ，好` → `iPhone，好`。
 
 ## 关闭某条规则
 
-在设置中用规则码将对应规则设为 `false` 即可，例如只关闭斜杠规则（MAS005）：
+在设置中用规则码将对应规则设为 `false` 即可，例如只关闭斜杠（MAS005）或新增规则：
 
 ```json
 {
   "markdownAutoSpace.rules": {
-    "MAS005": false
+    "MAS005": false,
+    "MAS009": false
   }
 }
 ```
 
 更多规则开关说明见 [docs/RULES.md](./docs/RULES.md)。
+
+## 更新日志
+
+| 版本 | 摘要 |
+|------|------|
+| **0.0.6** | 新增 MAS007–MAS009（指北空格：数字与单位、度/%、全形标点旁空格）；诊断与配置同步。详见 [CHANGELOG.md](./CHANGELOG.md)。 |
+| 0.0.5 及更早 | MAS006、Web 版、诊断与 MAS001–MAS005 等，见 CHANGELOG。 |
+
+完整历史见 **[CHANGELOG.md](./CHANGELOG.md)**。
 
 ## 查看运行日志
 
@@ -111,15 +138,12 @@ code --install-extension SWHL.markdown-auto-space
 
 若日志里出现「跳过: 非 Markdown 文件」，请确认当前文件右下角语言模式为 **Markdown**（点击可切换）。
 
-## 更新日志
-
-更多版本与改动见 [CHANGELOG](./CHANGELOG.md)。
-
 ## 参考资料
 
 - [vscode-auto-space](https://github.com/Talljack/vscode-auto-space)
 - [autocorrect](https://github.com/huacnlee/autocorrect)
 - [markdownlint](https://github.com/DavidAnson/markdownlint)
+- [中文文案排版指北](https://github.com/sparanoid/chinese-copywriting-guidelines)（空格相关规则由 MAS007–MAS009 等覆盖）
 
 ## 许可证
 

@@ -2,6 +2,27 @@
 
 本文档记录本项目的所有重要变更，格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [0.0.6] - 2026-03-18
+
+### 新增
+
+- **MAS007 — digitUnitSpace**：在阿拉伯数字与常见单位之间插入空格（如 `10Gbps` → `10 Gbps`，`20TB` → `20 TB`）。单位表含 `Gbps`、`TB`、`GHz`、`mAh` 等，见 [docs/RULES.md](./docs/RULES.md#mas007)。正文与超链接 `[]` 内文案均会处理。
+- **MAS008 — tightDegreePercent**：去掉数字与 `°`、`%`、`％` 之间的多余空格（如 `15 %` → `15%`）；`°`/`%` 后紧跟中文时保留一个空格（如 `90° 的角`、`15% 的`），与指北示例一致。
+- **MAS009 — noSpaceAroundCjkPunct**：去掉全形逗号、句号、叹号等句读标点两侧的 ASCII 空格；**不在** `【》《「『（` 前删空格，避免破坏 `console.log 【…` 等写法。
+- **诊断**：上述三条规则在开启 `markdownAutoSpace.diagnostics.enable` 时显示波浪线，规则码 **MAS007–MAS009** 可点击跳转文档。
+- **配置**：`markdownAutoSpace.rules` 增加 `MAS007`、`MAS008`、`MAS009` 布尔开关，默认 `true`。
+
+### 变更
+
+- **[README.md](./README.md)**：概述改为涵盖 MAS001–MAS009；补充规则一览表、MAS007–009 行为说明、版本摘要表与 CHANGELOG 入口。
+- **[docs/RULES.md](./docs/RULES.md)**：增加与 [中文文案排版指北](https://github.com/sparanoid/chinese-copywriting-guidelines)「空格」小节的对照表及 MAS007–009 专节。
+
+### 其他
+
+- 单元测试扩充（`applyDigitUnitSpace` / `applyTightDegreePercent` / `applyNoSpaceAroundCjkPunct`、`getLineViolations`、`getMarkdownSpaceViolations` 等）。
+
+---
+
 ## [0.0.5] - 2026-03-17
 
 ### 新增

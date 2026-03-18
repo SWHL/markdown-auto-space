@@ -1,0 +1,28 @@
+# Dependencies & store
+node_modules
+.pnpm-store
+
+# Source & build config
+src
+scripts
+*.ts
+!*.d.ts
+tsconfig.json
+tsup.config.ts
+eslint.config.mjs
+
+# Patches (dev-only)
+patches
+
+# Test & tooling
+test
+.github
+.cursor
+.idea
+.cache
+*.log
+.DS_Store
+coverage
+
+# VS Code extension pack artifact
+*.vsix

@@ -7,6 +7,74 @@ import type { MarkdownSpaceRulesType } from './type'
 
 const PROTECTED_PLACEHOLDER = '__PROTECTED_'
 
+/** 数字与单位：按长度降序，避免 Mbps 被拆成 M + bps */
+const DIGIT_UNIT_SUFFIXES = [
+  'Gbps', 'Mbps', 'Kbps', 'TiB', 'GiB', 'MiB', 'KiB', 'THz', 'GHz', 'MHz', 'kHz',
+  'mAh', 'dpi', 'bps', 'TB', 'GB', 'MB', 'KB', 'Hz', 'ms', 'ns', 'px', 'V', 'W',
+] as const
+
+const DIGIT_UNIT_PATTERN = DIGIT_UNIT_SUFFIXES.join('|')
+
+/**
+ * 数字（可含一位小数）与单位之间加空格，不与字母数字粘连
+ * @param text
+ */
+export function applyDigitUnitSpace(text: string): string {
+  const re = new RegExp(
+    `(?<![A-Za-z0-9_])(\\d+(?:\\.\\d+)?)(${DIGIT_UNIT_PATTERN})(?![A-Za-z0-9])`,
+    'g',
+  )
+  return text.replace(re, '$1 $2')
+}
+
+/**
+ * 度数、百分号与数字之间去掉多余空格；°/% 与后续中文之间保留一个空格（指北：90° 的角、15% 的）
+ * @param text
+ */
+export function applyTightDegreePercent(text: string): string {
+  let result = text
+  let prev = ''
+  while (prev !== result) {
+    prev = result
+    result = result.replace(/(\d+)\s+([°%％])/g, '$1$2')
+  }
+  result = result.replace(/([°%％])(?=[\u4e00-\u9fff])/g, '$1 ')
+  return result
+}
+
+/**
+ * 全形标点两侧不留 ASCII 空格（指北：逗号、句号等与其他字符间不加空格）。
+ * 不在【《「『（前删空格，避免英文与左引号/左括号之间可读性被破坏（如 console.log 【）。
+ * @param text
+ */
+export function applyNoSpaceAroundCjkPunct(text: string): string {
+  const noSpaceBefore = String.raw`，。！？；：、…」』】》）`
+  const noSpaceAfter = String.raw`，。！？；：、…「」『』【《（`
+  const noSpaceBeforeClose = String.raw`】》」』）`
+  let result = text.replace(new RegExp(`\\s+([${noSpaceBefore}])`, 'gu'), '$1')
+  result = result.replace(new RegExp(`([${noSpaceAfter}])\\s+`, 'gu'), '$1')
+  result = result.replace(new RegExp(`\\s+([${noSpaceBeforeClose}])`, 'gu'), '$1')
+  return result
+}
+
+/**
+ *
+ * @param linkText
+ * @param options
+ */
+function applyLinkTextPostRules(linkText: string, options: MarkdownSpaceRulesType): string {
+  let lt = linkText
+  if (options.digitUnitSpace)
+    lt = applyDigitUnitSpace(lt)
+  if (options.tightDegreePercent)
+    lt = applyTightDegreePercent(lt)
+  if (options.noSpaceAroundCjkPunct)
+    lt = applyNoSpaceAroundCjkPunct(lt)
+  if (options.chineseLinkText)
+    lt = addSpacesInText(lt, true)
+  return lt
+}
+
 const DEFAULT_RULES: MarkdownSpaceRulesType = {
   chineseAlnum: true,
   chineseBacktick: true,
@@ -14,6 +82,9 @@ const DEFAULT_RULES: MarkdownSpaceRulesType = {
   chineseLinkText: true,
   dunhaoToComma: true,
   slashSpace: true,
+  digitUnitSpace: true,
+  tightDegreePercent: true,
+  noSpaceAroundCjkPunct: true,
 }
 
 /** 规则码与说明（用于诊断提示，类似 markdownlint 的 MDxxx） */
@@ -24,10 +95,79 @@ export const RULE_DIAGNOSTIC_MAP: Record<keyof MarkdownSpaceRulesType, { code: s
   chineseLinkText: { code: 'MAS006', message: '超链接 [] 内中英文混排时英文左右应有空格' },
   dunhaoToComma: { code: 'MAS004', message: '英文/数字间的顿号应改为逗号+空格' },
   slashSpace: { code: 'MAS005', message: '斜杠与中文之间应有空格' },
+  digitUnitSpace: { code: 'MAS007', message: '数字与单位之间应有空格' },
+  tightDegreePercent: { code: 'MAS008', message: '度数、百分号与数字之间不应有空格' },
+  noSpaceAroundCjkPunct: { code: 'MAS009', message: '全形标点旁不应有空格' },
 }
 
 /**
+ *
+ * @param ranges
+ */
+function mergeRanges(ranges: [number, number][]): [number, number][] {
+  if (ranges.length === 0)
+    return []
+  const sorted = [...ranges].sort((a, b) => a[0] - b[0])
+  const out: [number, number][] = []
+  let cur = sorted[0]!
+  for (let i = 1; i < sorted.length; i++) {
+    const r = sorted[i]!
+    if (r[0] <= cur[1]) {
+      cur = [cur[0], Math.max(cur[1], r[1])]
+    }
+    else {
+      out.push(cur)
+      cur = r
+    }
+  }
+  out.push(cur)
+  return out
+}
+
+/**
+ *
+ * @param line
+ */
+function collectProtectedRanges(line: string): [number, number][] {
+  const patterns = [
+    /(`+)([\s\S]*?)\1/g,
+    /!\[[^\]]*\]\([^)]+\)/g,
+    /\[([^\]]+)\]\(([^)]+)\)/g,
+    /<\/?[a-zA-Z][^>]*>/g,
+    /https?:\/\/[a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=%]+/g,
+    /"[^"]*"/g,
+    /'[^']*'/g,
+    /\*\*[^*]+\*\*/g,
+  ]
+  const ranges: [number, number][] = []
+  for (const re of patterns) {
+    const r = new RegExp(re.source, 'g')
+    let m: RegExpExecArray | null
+    while ((m = r.exec(line)) !== null)
+      ranges.push([m.index, m.index + m[0].length])
+  }
+  return mergeRanges(ranges)
+}
+
+/**
+ *
+ * @param ranges
+ * @param start
+ * @param end
+ */
+function rangeOverlaps(ranges: [number, number][], start: number, end: number): boolean {
+  return ranges.some(([a, b]) => start < b && end > a)
+}
+
+const DIGIT_UNIT_VIOLATION_RE = new RegExp(
+  `(?<![A-Za-z0-9_])(\\d+(?:\\.\\d+)?)(${DIGIT_UNIT_PATTERN})(?![A-Za-z0-9])`,
+  'g',
+)
+
+/**
  * 比较原始行与处理后行，找出「插入空格」的位置（在原始行中的起始下标，高亮两字符）
+ * @param original
+ * @param output
  */
 function findInsertionRanges(original: string, output: string): number[] {
   const starts: number[] = []
@@ -52,26 +192,117 @@ function findInsertionRanges(original: string, output: string): number[] {
 }
 
 /**
+ *
+ */
+function emptyRules(): MarkdownSpaceRulesType {
+  return {
+    chineseAlnum: false,
+    chineseBacktick: false,
+    chineseLinkUrl: false,
+    chineseLinkText: false,
+    dunhaoToComma: false,
+    slashSpace: false,
+    digitUnitSpace: false,
+    tightDegreePercent: false,
+    noSpaceAroundCjkPunct: false,
+  }
+}
+
+/**
  * 对单行检测违反规则的位置，返回用于诊断的区间与规则信息（仅对当前启用的规则）
+ * @param line
+ * @param rules
  */
 export function getLineViolations(
   line: string,
   rules: MarkdownSpaceRulesType,
 ): { start: number, length: number, ruleId: keyof MarkdownSpaceRulesType, code: string, message: string }[] {
   const violations: { start: number, length: number, ruleId: keyof MarkdownSpaceRulesType, code: string, message: string }[] = []
-  const ruleKeys = (Object.keys(rules) as (keyof MarkdownSpaceRulesType)[]).filter(k => rules[k])
+  const protectedRanges = collectProtectedRanges(line)
   const seenStarts = new Set<number>()
-  for (const ruleId of ruleKeys) {
-    const onlyThisRule: MarkdownSpaceRulesType = {
-      chineseAlnum: false,
-      chineseBacktick: false,
-      chineseLinkUrl: false,
-      chineseLinkText: false,
-      dunhaoToComma: false,
-      slashSpace: false,
-      [ruleId]: true,
+
+  const pushUnique = (start: number, length: number, ruleId: keyof MarkdownSpaceRulesType) => {
+    if (seenStarts.has(start))
+      return
+    seenStarts.add(start)
+    const meta = RULE_DIAGNOSTIC_MAP[ruleId]
+    if (length <= 0 || start >= line.length)
+      return
+    violations.push({
+      start,
+      length: Math.min(length, line.length - start),
+      ruleId,
+      code: meta.code,
+      message: meta.message,
+    })
+  }
+
+  if (rules.digitUnitSpace) {
+    let m: RegExpExecArray | null
+    DIGIT_UNIT_VIOLATION_RE.lastIndex = 0
+    while ((m = DIGIT_UNIT_VIOLATION_RE.exec(line)) !== null) {
+      const num = m[1]!
+      const start = m.index + num.length
+      const end = start + (m[2]!.length)
+      if (!rangeOverlaps(protectedRanges, m.index, end))
+        pushUnique(start > 0 ? start - 1 : start, Math.min(2, line.length - (start > 0 ? start - 1 : start)), 'digitUnitSpace')
     }
-    const output = addSpacesBetweenChineseAndAlnum(line, onlyThisRule)
+  }
+
+  if (rules.tightDegreePercent) {
+    const re = /(\d+)(\s+)([°%％])/g
+    let m: RegExpExecArray | null
+    while ((m = re.exec(line)) !== null) {
+      const spStart = m.index + m[1]!.length
+      const spEnd = spStart + m[2]!.length
+      if (!rangeOverlaps(protectedRanges, spStart, spEnd))
+        pushUnique(spStart, m[2]!.length, 'tightDegreePercent')
+    }
+  }
+
+  if (rules.noSpaceAroundCjkPunct) {
+    const noSpaceBefore = String.raw`，。！？；：、…」』】》）`
+    const noSpaceAfter = String.raw`，。！？；：、…「」『』【《（`
+    const noSpaceBeforeClose = String.raw`】》」』）`
+    const beforePunct = new RegExp(`\\s+([${noSpaceBefore}])`, 'gu')
+    let m: RegExpExecArray | null
+    while ((m = beforePunct.exec(line)) !== null) {
+      const spStart = m.index
+      const spEnd = spStart + m[0].length - m[1]!.length
+      if (!rangeOverlaps(protectedRanges, spStart, spEnd))
+        pushUnique(spStart, spEnd - spStart, 'noSpaceAroundCjkPunct')
+    }
+    const afterPunct = new RegExp(`([${noSpaceAfter}])(\\s+)`, 'gu')
+    while ((m = afterPunct.exec(line)) !== null) {
+      const spStart = m.index + m[1]!.length
+      const spEnd = spStart + m[2]!.length
+      if (!rangeOverlaps(protectedRanges, spStart, spEnd))
+        pushUnique(spStart, spEnd - spStart, 'noSpaceAroundCjkPunct')
+    }
+    const beforeClose = new RegExp(`\\s+([${noSpaceBeforeClose}])`, 'gu')
+    while ((m = beforeClose.exec(line)) !== null) {
+      const spStart = m.index
+      const spEnd = spStart + m[0].length - m[1]!.length
+      if (!rangeOverlaps(protectedRanges, spStart, spEnd))
+        pushUnique(spStart, spEnd - spStart, 'noSpaceAroundCjkPunct')
+    }
+  }
+
+  const insertionRuleIds: (keyof MarkdownSpaceRulesType)[] = [
+    'chineseAlnum',
+    'chineseBacktick',
+    'chineseLinkUrl',
+    'chineseLinkText',
+    'dunhaoToComma',
+    'slashSpace',
+  ]
+
+  for (const ruleId of insertionRuleIds) {
+    if (!rules[ruleId])
+      continue
+    const only = emptyRules()
+    only[ruleId] = true
+    const output = addSpacesBetweenChineseAndAlnum(line, only)
     const starts = findInsertionRanges(line, output)
     const meta = RULE_DIAGNOSTIC_MAP[ruleId]
     for (const start of starts) {
@@ -90,12 +321,14 @@ export function getLineViolations(
       })
     }
   }
+
   return violations
 }
 
 /**
  * 在中文和数字/英文之间添加空格（单行处理）
  * 先保护 Markdown 链接、HTML 标签、URL、**粗体**，处理后再恢复
+ * @param text
  * @param options 未传则全部规则启用（与旧行为一致）
  */
 export function addSpacesBetweenChineseAndAlnum(
@@ -104,6 +337,10 @@ export function addSpacesBetweenChineseAndAlnum(
 ): string {
   const protectedItems: string[] = []
 
+  /**
+   *
+   * @param match
+   */
   function saveItem(match: string): string {
     protectedItems.push(match)
     return `${PROTECTED_PLACEHOLDER}${protectedItems.length - 1}__`
@@ -112,10 +349,9 @@ export function addSpacesBetweenChineseAndAlnum(
   let result = text
 
   // 1. 保护反引号包裹的 inline code（最高优先级，内部可为任意内容）
-  // 支持 1 个或多个反引号作为定界符：`code`、``a ` b`` 等
   result = result.replace(/(`+)([\s\S]*?)\1/g, saveItem)
 
-  // 2. 保护 Markdown 图片语法 ![](url) 或 ![alt](url)，避免 URL 内 / 被加空格
+  // 2. 保护 Markdown 图片语法
   result = result.replace(/!\[[^\]]*\]\([^)]+\)/g, saveItem)
 
   // 3. 保护 Markdown 链接 [text](url)
@@ -127,14 +363,13 @@ export function addSpacesBetweenChineseAndAlnum(
   // 5. 保护独立 URL
   result = result.replace(/https?:\/\/[a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=%]+/g, saveItem)
 
-  // 6. 保护引号中的内容，一律不参与后续空格规则
+  // 6. 保护引号中的内容
   result = result.replace(/"[^"]*"/g, saveItem)
   result = result.replace(/'[^']*'/g, saveItem)
 
   // 7. 保护 **粗体**
   result = result.replace(/\*\*[^*]+\*\*/g, saveItem)
 
-  // 8. 英文/数字/反引号等之间的中文顿号 -> 英文逗号+空格
   if (options.dunhaoToComma) {
     result = result.replace(
       /([a-zA-Z0-9`+\-*/=])、(?=[a-zA-Z0-9`])/g,
@@ -142,7 +377,6 @@ export function addSpacesBetweenChineseAndAlnum(
     )
   }
 
-  // 9. 10. / 左右加空格（仅当一侧为中文时，左右均为英文/数字如 release/v3.0 不加）
   if (options.slashSpace) {
     result = result.replace(
       /([\u4e00-\u9fff])(?! )(\/)/g,
@@ -154,7 +388,6 @@ export function addSpacesBetweenChineseAndAlnum(
     )
   }
 
-  // 11. 12. 中文与反引号之间加空格
   if (options.chineseBacktick) {
     result = result.replace(
       /([\u4e00-\u9fff])(?! )(`)/g,
@@ -166,7 +399,6 @@ export function addSpacesBetweenChineseAndAlnum(
     )
   }
 
-  // 13. 14. 中文与占位符(链接/URL)之间加空格
   if (options.chineseLinkUrl) {
     result = result.replace(
       new RegExp(`([\\u4e00-\\u9fff])(?! )(${PROTECTED_PLACEHOLDER}\\d+__)`, 'g'),
@@ -178,7 +410,6 @@ export function addSpacesBetweenChineseAndAlnum(
     )
   }
 
-  // 15. 16. 中文与英文/数字之间加空格
   if (options.chineseAlnum) {
     result = result.replace(
       /([\u4e00-\u9fff])(?! )([a-zA-Z0-9(])/g,
@@ -190,26 +421,35 @@ export function addSpacesBetweenChineseAndAlnum(
     )
   }
 
-  // 恢复被保护的内容；支持嵌套占位符，循环恢复直到稳定，避免泄漏 __PROTECTED_x__
+  if (options.digitUnitSpace)
+    result = applyDigitUnitSpace(result)
+
+  if (options.tightDegreePercent)
+    result = applyTightDegreePercent(result)
+
+  if (options.noSpaceAroundCjkPunct)
+    result = applyNoSpaceAroundCjkPunct(result)
+
   const placeholderRegex = new RegExp(`${PROTECTED_PLACEHOLDER}(\\d+)__`, 'g')
+  /**
+   *
+   * @param input
+   */
   function restoreOnePass(input: string): string {
     return input.replace(placeholderRegex, (fullMatch, indexStr) => {
       const i = Number.parseInt(indexStr, 10)
       let item = protectedItems[i]
-      // 文档中可能含有字面量 __PROTECTED_0__ 等，导致索引越界，原样保留避免报错
       if (item === undefined)
         return fullMatch
       const linkMatch = item.match(/^\[([^\]]+)\]\(([^)]+)\)$/)
-      // 仅对普通链接 [text](url) 处理链接文本中的空格（MAS006），图片 ![alt](url) 原样恢复
       if (linkMatch && !linkMatch[1].startsWith('!')) {
         const [, linkText, linkUrl] = linkMatch
-        item = `[${addSpacesInText(linkText, options.chineseLinkText)}](${linkUrl})`
+        item = `[${applyLinkTextPostRules(linkText, options)}](${linkUrl})`
       }
       return item
     })
   }
 
-  // 最多迭代 protectedItems.length + 1 次，足以展开所有嵌套，避免异常输入导致死循环
   for (let pass = 0; pass <= protectedItems.length; pass += 1) {
     const restored = restoreOnePass(result)
     if (restored === result)
@@ -222,10 +462,12 @@ export function addSpacesBetweenChineseAndAlnum(
 
 /**
  * 仅对纯文本做中英文间加空格（用于链接文本等，不保护 URL）
- * @param apply 为 false 时不处理，直接返回原文
+ * @param text
+ * @param apply
  */
 export function addSpacesInText(text: string, apply = true): string {
-  if (!apply) return text
+  if (!apply)
+    return text
   let result = text
   result = result.replace(
     /([\u4e00-\u9fff])(?! )([a-zA-Z0-9])/g,
@@ -239,20 +481,26 @@ export function addSpacesInText(text: string, apply = true): string {
 }
 
 /**
- * 是否应跳过该行（不参与加空格处理）
+ *
+ * @param line
  */
 export function shouldSkipLine(line: string): boolean {
   const stripped = line.trim()
-  if (stripped === '---') return true
-  if (stripped.startsWith('```')) return true
-  if (stripped.startsWith('<') && stripped.endsWith('>')) return true
-  if (/^\[.+\]:\s*http/.test(stripped)) return true
+  if (stripped === '---')
+    return true
+  if (stripped.startsWith('```'))
+    return true
+  if (stripped.startsWith('<') && stripped.endsWith('>'))
+    return true
+  if (/^\[.+\]:\s*http/.test(stripped))
+    return true
   return false
 }
 
 /**
- * 处理整篇 Markdown 内容：跳过代码块与 YAML front matter 内的行，其余行做加空格
- * @param rules 未传则全部规则启用
+ *
+ * @param content
+ * @param rules
  */
 export function processMarkdownContent(
   content: string,
@@ -267,9 +515,8 @@ export function processMarkdownContent(
   for (const line of lines) {
     if (line.trim() === '---') {
       yamlFrontMatterCount += 1
-      if (yamlFrontMatterCount <= 2) {
+      if (yamlFrontMatterCount <= 2)
         inYamlFrontMatter = yamlFrontMatterCount === 1
-      }
     }
 
     if (line.trim().startsWith('```')) {
@@ -283,8 +530,7 @@ export function processMarkdownContent(
       continue
     }
 
-    // 缩进代码块（行首 4 空格或 1 tab）：代码中内容一律不处理
-    if (/^(\t|    )/.test(line)) {
+    if (/^(\t| {4})/.test(line)) {
       newLines.push(line)
       continue
     }
@@ -295,7 +541,6 @@ export function processMarkdownContent(
   return newLines.join('\n')
 }
 
-/** 单条诊断项（行、列、规则、文案），供扩展层转成 vscode.Diagnostic */
 export interface MarkdownSpaceViolation {
   lineIndex: number
   start: number
@@ -306,7 +551,9 @@ export interface MarkdownSpaceViolation {
 }
 
 /**
- * 对整篇 Markdown 做与 processMarkdownContent 相同的行过滤，收集所有违规位置
+ *
+ * @param content
+ * @param rules
  */
 export function getMarkdownSpaceViolations(
   content: string,
@@ -319,7 +566,7 @@ export function getMarkdownSpaceViolations(
   let yamlFrontMatterCount = 0
 
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
-    const line = lines[lineIndex]
+    const line = lines[lineIndex]!
     if (line.trim() === '---') {
       yamlFrontMatterCount += 1
       if (yamlFrontMatterCount <= 2)
@@ -331,7 +578,7 @@ export function getMarkdownSpaceViolations(
     }
     if (inCodeBlock || inYamlFrontMatter)
       continue
-    if (/^(\t|    )/.test(line))
+    if (/^(\t| {4})/.test(line))
       continue
 
     const lineViolations = getLineViolations(line, rules)
