@@ -1,8 +1,10 @@
 # Dependencies & store
 node_modules
 .pnpm-store
+pnpm-lock.yaml
+pnpm-workspace.yaml
 
-# Source & build config
+# Source & build config (extension uses dist/)
 src
 scripts
 *.ts
@@ -11,7 +13,7 @@ tsconfig.json
 tsup.config.ts
 eslint.config.mjs
 
-# Patches (dev-only)
+# Patches (dev-only, not needed in extension)
 patches
 
 # Test & tooling
@@ -24,6 +26,3 @@ test
 .DS_Store
 coverage
 *.tgz
-
-# VS Code extension pack artifact
-*.vsix

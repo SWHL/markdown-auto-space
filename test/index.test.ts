@@ -1,18 +1,115 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import { Range } from 'vscode'
 import {
   applyDigitUnitSpace,
   applyNoSpaceAroundCjkPunct,
   applyTightDegreePercent,
   getLineViolations,
   getMarkdownSpaceViolations,
+  getSkippedLineIndices,
   processMarkdownContent,
   shouldSkipLine,
 } from '../src/markdownSpace'
 import { DEFAULT_MARKDOWN_SPACE_RULES, MANUAL_SAVE_REASON, RULES_DOC_BASE_URL, getRuleDocUrl, normalizeRules, shouldRunFormatOnSave } from '../src/type'
 import type { MarkdownSpaceRulesType } from '../src/type'
+import { getMarkdownAutoSpaceConfig, getMarkdownAutoSpaceEdits, getMarkdownAutoSpaceEditsForRange } from '../src/utils'
+
+vi.mock('vscode', () => {
+  class Range {
+    start: { line: number, character: number }
+    end: { line: number, character: number }
+
+    constructor(start: { line: number, character: number }, end: { line: number, character: number }) {
+      this.start = start
+      this.end = end
+    }
+  }
+
+  class TextEdit {
+    range: Range
+    newText: string
+
+    constructor(range: Range, newText: string) {
+      this.range = range
+      this.newText = newText
+    }
+
+    static replace(range: Range, newText: string) {
+      return new TextEdit(range, newText)
+    }
+  }
+
+  return {
+    Diagnostic: class {},
+    DiagnosticSeverity: { Information: 1 },
+    Range,
+    TextEdit,
+    Uri: { parse: (value: string) => value },
+    window: { activeTextEditor: undefined },
+    workspace: {
+      getConfiguration: () => ({
+        get: (key: string) => {
+          if (key === 'formatOnSave')
+            return true
+          if (key === 'formatOnDocument')
+            return false
+          if (key === 'rules')
+            return undefined
+          if (key === 'diagnostics.enable')
+            return true
+          return undefined
+        },
+      }),
+    },
+  }
+})
 
 /** 单条用例: [用例描述, 输入, 期望输出]（描述放首位便于 it.each 显示测试名） */
 type CaseRow = [description: string, input: string, expected: string]
+
+/** 创建兼容 Range 构造的测试位置对象。 */
+function createPosition(line: number, character: number) {
+  return { line, character } as never
+}
+
+/** 构造最小化的 TextDocument mock，供 utils 层单测使用。 */
+function createMockDocument(text: string, languageId = 'markdown') {
+  const lines = text.split('\n')
+  const lineOffsets: number[] = []
+  let offset = 0
+  for (const line of lines) {
+    lineOffsets.push(offset)
+    offset += line.length + 1
+  }
+
+  return {
+    languageId,
+    lineCount: lines.length,
+    getText(range?: { start: { line: number, character: number }, end: { line: number, character: number } }) {
+      if (!range)
+        return text
+      const startOffset = lineOffsets[range.start.line]! + range.start.character
+      const endOffset = lineOffsets[range.end.line]! + range.end.character
+      return text.slice(startOffset, endOffset)
+    },
+    lineAt(line: number) {
+      const lineText = lines[line]!
+      return {
+        text: lineText,
+        range: {
+          start: { line, character: 0 },
+          end: { line, character: lineText.length },
+        },
+      }
+    },
+    positionAt(offset: number) {
+      let line = 0
+      while (line + 1 < lineOffsets.length && lineOffsets[line + 1]! <= offset)
+        line += 1
+      return { line, character: offset - lineOffsets[line]! }
+    },
+  } as Parameters<typeof getMarkdownAutoSpaceEdits>[0]
+}
 
 // ---------------------------------------------------------------------------
 // 所有测试用例（统一放在文件开头）
@@ -342,6 +439,13 @@ describe('shouldSkipLine', () => {
   })
 })
 
+describe('getSkippedLineIndices', () => {
+  it('统一识别 YAML、围栏代码块和缩进代码块', () => {
+    const skipped = getSkippedLineIndices('---\ntitle: 测试\n---\n```ts\n中文English\n```\n    中文English\n正文English')
+    expect([...skipped]).toEqual([0, 1, 2, 3, 4, 5, 6])
+  })
+})
+
 describe('DEFAULT_MARKDOWN_SPACE_RULES', () => {
   it('包含 MAS001–MAS009 对应键且默认开启', () => {
     expect(DEFAULT_MARKDOWN_SPACE_RULES).toMatchObject({
@@ -370,5 +474,51 @@ describe('processMarkdownContent 组合规则', () => {
       noSpaceAroundCjkPunct: false,
     }
     expect(processMarkdownContent('10Gbps， 15 %', rules)).toBe('10Gbps， 15 %')
+  })
+})
+
+describe('getMarkdownAutoSpaceEdits', () => {
+  it('文本无变化时不返回 edit', () => {
+    const document = createMockDocument('已经有 空格')
+    expect(getMarkdownAutoSpaceEdits(document, '已经有 空格')).toBeUndefined()
+  })
+
+  it('文本有变化时返回整篇替换 edit', () => {
+    const document = createMockDocument('中文English')
+    const edits = getMarkdownAutoSpaceEdits(document, '中文English')
+    expect(edits).toHaveLength(1)
+    expect(edits?.[0]?.newText).toBe('中文 English')
+  })
+
+  it('非 Markdown 文档不返回 edit', () => {
+    const document = createMockDocument('中文English', 'plaintext')
+    expect(getMarkdownAutoSpaceEdits(document, '中文English')).toBeUndefined()
+  })
+})
+
+describe('getMarkdownAutoSpaceEditsForRange', () => {
+  it('选区跨围栏代码块时跳过代码块内容，仅处理正文', () => {
+    const text = '```ts\n中文English\n```\n正文English'
+    const document = createMockDocument(text)
+    const range = new Range(createPosition(0, 0), createPosition(3, 9))
+    const edits = getMarkdownAutoSpaceEditsForRange(document, range)
+    expect(edits).toHaveLength(1)
+    expect(edits?.[0]?.newText).toBe('```ts\n中文English\n```\n正文 English')
+  })
+
+  it('选区位于 YAML front matter 中时不返回 edit', () => {
+    const text = '---\ntitle: 中文English\n---\n正文'
+    const document = createMockDocument(text)
+    const range = new Range(createPosition(0, 0), createPosition(2, 3))
+    expect(getMarkdownAutoSpaceEditsForRange(document, range)).toBeUndefined()
+  })
+})
+
+describe('getMarkdownAutoSpaceConfig', () => {
+  it('返回格式化文档开关，供标准 formatting provider 使用', () => {
+    const config = getMarkdownAutoSpaceConfig()
+    expect(config.formatOnDocument).toBe(false)
+    expect(config.formatOnSave).toBe(true)
+    expect('spaceType' in config).toBe(false)
   })
 })

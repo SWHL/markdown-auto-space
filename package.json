@@ -2,7 +2,7 @@
   "publisher": "SWHL",
   "name": "markdown-auto-space",
   "displayName": "Markdown Auto Space",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "private": true,
   "packageManager": "pnpm@9.14.1",
   "description": "Auto add space between Chinese and English in Markdown when you save file",
@@ -26,8 +26,9 @@
     "vscode": "^1.69.0"
   },
   "activationEvents": [
-    "onStartupFinished",
-    "onLanguage"
+    "onLanguage:markdown",
+    "onCommand:extension.markdownAutoSpace",
+    "onCommand:extension.markdownAutoSpaceFormatSelection"
   ],
   "contributes": {
     "commands": [
@@ -94,15 +95,6 @@
           "default": false,
           "description": "Execute add space on Format Document command"
         },
-        "markdownAutoSpace.spaceType": {
-          "type": "string",
-          "default": "all",
-          "enum": [
-            "all",
-            "comment"
-          ],
-          "description": "Markdown Auto Space's type"
-        },
         "markdownAutoSpace.rules": {
           "type": "object",
           "description": "Enable or disable each space rule by code (MAS001–MAS009). All default to true. See docs/RULES.md.",
@@ -160,17 +152,17 @@
   "scripts": {
     "build": "tsup src/index.ts --external vscode",
     "build:web": "node scripts/build-web.mjs",
-    "dev": "nr build --watch",
-    "lint": "eslint . --fix",
-    "vscode:prepublish": "nr build && nr build:web",
+    "dev": "pnpm build --watch",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "package:vsix": "vsce package --no-dependencies",
+    "vscode:prepublish": "pnpm build && pnpm build:web",
     "publish": "vsce publish --no-dependencies",
-    "pack": "vsce package --no-dependencies",
-    "test": "vitest",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "release": "bumpp && nr publish"
+    "release": "bumpp && pnpm run publish"
   },
   "devDependencies": {
-    "@antfu/ni": "^0.23.1",
     "@types/node": "^22.9.1",
     "@types/vscode": "^1.69.0",
     "@vscode/vsce": "^3.2.1",

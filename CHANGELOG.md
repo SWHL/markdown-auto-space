@@ -2,6 +2,34 @@
 
 本文档记录本项目的所有重要变更，格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [0.0.7] - 2026-04-23
+
+### 新增
+
+- **自动发版工作流**：推送形如 `v*` 的 tag 后，GitHub Actions 会自动执行校验、打包 `.vsix`，并创建或更新对应版本的 GitHub Release 草稿，将 `.vsix` 作为附件上传。
+- **版本一致性校验**：Release workflow 新增 tag 与 `package.json.version` 一致性检查，避免 `v0.0.7` 这类 tag 与扩展实际版本不一致时误发版。
+- **开发命令整理**：新增并固定 `pnpm package:vsix` 作为本地与 CI 共用的 VSIX 打包命令。
+
+### 变更
+
+- **格式化编辑行为**：当文档内容格式化前后无变化时，不再返回全文替换 edit，避免无意义的 `applyEdit` 与文档脏状态抖动。
+- **格式化文档接入方式**：移除对 VS Code 内置 `editor.action.formatDocument` 的覆盖，改为仅通过标准 `DocumentFormattingEditProvider` 提供格式化能力。
+- **选区格式化与整篇格式化统一**：选区格式化现与整篇格式化共享跳过规则，YAML front matter、围栏代码块与缩进代码块中的内容不会再被误改。
+- **按需激活**：扩展激活条件收紧为仅在 Markdown 文档或扩展命令触发时加载，不再在普通工作区启动时提前激活。
+- **配置清理**：移除未实际生效的 `markdownAutoSpace.spaceType` 配置项，保持配置面与实现一致。
+- **工程脚本与 CI**：测试脚本改为一次性运行；`lint` 改为纯检查并新增 `lint:fix`；CI 合并为单 job 顺序执行 `lint`、`typecheck`、`build`、`test`，减少重复安装依赖。
+- **发布链路去除 ni 依赖**：发布脚本、CI 与 Release workflow 均改为直接使用 `pnpm`，不再依赖 `ni` / `nr` / `nci`。
+
+### 修复
+
+- **VSIX 打包内容**：修复本地生成的 `.tgz` 可能被误打进 `.vsix` 的问题，现已通过忽略规则排除。
+- **Release 附件覆盖**：同一 tag 重跑 Release workflow 时，VSIX 附件会覆盖旧文件，避免重复或冲突。
+
+### 其他
+
+- 单元测试扩充至覆盖“无变化不返回 edit”“选区跨代码块/YAML front matter 跳过处理”“配置读取行为”等场景。
+- ESLint 配置关闭与当前代码风格不匹配的低价值 JSDoc 规则，`pnpm lint` 现可稳定作为 CI 校验使用。
+
 ## [0.0.6] - 2026-03-18
 
 ### 新增

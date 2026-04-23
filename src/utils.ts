@@ -1,7 +1,7 @@
 // import type { TextEditorEdit } from 'vscode'
 import type { TextDocument } from 'vscode'
 import { Diagnostic, DiagnosticSeverity, Range, TextEdit, Uri, window as Window, workspace as Workspace } from 'vscode'
-import { addSpacesBetweenChineseAndAlnum, getMarkdownSpaceViolations, processMarkdownContent } from './markdownSpace'
+import { addSpacesBetweenChineseAndAlnum, getMarkdownSpaceViolations, getSkippedLineIndices, processMarkdownContent } from './markdownSpace'
 import type { AutoSpaceConfigType } from './type'
 import { getRuleDocUrl, normalizeRules } from './type'
 
@@ -12,13 +12,11 @@ export function getMarkdownAutoSpaceConfig(): AutoSpaceConfigType {
   const config = Workspace.getConfiguration('markdownAutoSpace')
   const formatOnSave = config.get('formatOnSave') as boolean
   const formatOnDocument = config.get('formatOnDocument') as boolean
-  const spaceType = config.get('spaceType') as AutoSpaceConfigType['spaceType']
   const rulesRaw = config.get('rules') as Record<string, boolean> | undefined
   const rules = normalizeRules(rulesRaw)
   return {
     formatOnSave,
     formatOnDocument,
-    spaceType,
     rules,
   }
 }
@@ -45,6 +43,8 @@ export function getMarkdownAutoSpaceEdits(
 
   const { rules } = getMarkdownAutoSpaceConfig()
   const updatedText = processMarkdownContent(text, rules)
+  if (updatedText === text)
+    return undefined
   const fullRange = new Range(
     document.positionAt(0),
     document.positionAt(text.length),
@@ -67,9 +67,24 @@ export function getMarkdownAutoSpaceEditsForRange(
   if (!text.length)
     return undefined
   const { rules } = getMarkdownAutoSpaceConfig()
-  const lines = text.split('\n')
-  const formatted = lines.map(line => addSpacesBetweenChineseAndAlnum(line, rules))
-  const newText = formatted.join('\n')
+  const skippedLineIndices = getSkippedLineIndices(document.getText())
+  const formattedLines: string[] = []
+
+  for (let lineIndex = range.start.line; lineIndex <= range.end.line; lineIndex++) {
+    const line = document.lineAt(lineIndex)
+    const lineStart = lineIndex === range.start.line ? range.start.character : 0
+    const lineEnd = lineIndex === range.end.line ? range.end.character : line.text.length
+    const selectedText = line.text.slice(lineStart, lineEnd)
+
+    if (skippedLineIndices.has(lineIndex)) {
+      formattedLines.push(selectedText)
+      continue
+    }
+
+    formattedLines.push(addSpacesBetweenChineseAndAlnum(selectedText, rules))
+  }
+
+  const newText = formattedLines.join('\n')
   if (newText === text)
     return undefined
   return [TextEdit.replace(range, newText)]
@@ -132,6 +147,8 @@ export function markdownAutoSpace(text: string) {
 
   const { rules } = getMarkdownAutoSpaceConfig()
   const updatedText = processMarkdownContent(text, rules)
+  if (updatedText === text)
+    return
   const fullRange = new Range(
     document.positionAt(0),
     document.positionAt(text.length),

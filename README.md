@@ -4,17 +4,17 @@
 
 # Markdown Auto Space
 
-> 在保存或格式化时，按可配置规则整理 Markdown 中的空格（中英混排、[中文文案排版指北](https://github.com/sparanoid/chinese-copywriting-guidelines)空格相关约定等）。
+> 在保存或格式化时，按可配置规则整理 Markdown 中的空格（中英混排、[中文文案排版指北](https://github.com/sparanoid/chinese-copywriting-guidelines) 空格相关约定等）。
 
 [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=SWHL.markdown-auto-space)
 
 ## 概述
 
-中文与英文、数字混排时增加空格可提升可读性。本扩展在 VS Code 中针对 **Markdown** 文件，在**手动保存**或（可选）「格式化文档」时应用 **MAS001–MAS009** 共九条规则，例如：
+中文与英文、数字混排时增加空格可提升可读性。本扩展在 VS Code 中针对 **Markdown** 文件，在 **手动保存** 或（可选）「格式化文档」时应用 **MAS001–MAS009** 共九条规则，例如：
 
 | 方向 | 规则码 | 简述 |
 |------|--------|------|
-| 中英与数字边界 | MAS001–MAS006 | 中英文/数字、反引号、链接与 URL、顿号、斜杠、`[]` 内混排等 |
+| 中英与数字边界 | MAS001–MAS006 | 中英文 / 数字、反引号、链接与 URL、顿号、斜杠、`[]` 内混排等 |
 | 数字与单位 | **MAS007** | `10Gbps` → `10 Gbps`，`20TB` → `20 TB` |
 | 度与百分号 | **MAS008** | `15 %`、`90 °` → `15%`、`90°`，且 `%`/`°` 后接中文时保留空格 |
 | 全形标点旁 | **MAS009** | 去掉 `，`、`。` 等旁多余 ASCII 空格（不破坏 `log 【` 类写法） |
@@ -48,10 +48,10 @@ code --install-extension SWHL.markdown-auto-space
 | `markdownAutoSpace.diagnostics.enable`     | `true`  | `boolean`           | 是否在编辑器中显示规则违反处的波浪线提示（类似 markdownlint） |
 | `markdownAutoSpace.formatOnSave`          | `true`  | `boolean`           | 仅在你手动保存（如 Ctrl+S）时加空格，自动保存不触发 |
 | `markdownAutoSpace.formatOnDocument`      | `false` | `boolean`           | 执行「格式化文档」时加空格            |
-| `markdownAutoSpace.spaceType`             | `'all'` | `'all' | 'comment'` | 作用范围（当前为全部内容）            |
 | `markdownAutoSpace.rules`                 | 见 [RULES.md](./docs/RULES.md) | `object` | 各条规则的开关（MAS001–MAS009），未写出的规则默认为 `true` |
 
 本扩展仅处理 **Markdown** 文件（语言 ID 为 `markdown`），不处理 txt 等其他类型。
+扩展按需激活：仅在打开 Markdown 文档或执行本扩展命令时加载，不会在普通工作区启动时提前激活。
 
 ### 诊断（规则提示）
 
@@ -63,7 +63,7 @@ code --install-extension SWHL.markdown-auto-space
 - **MAS004**：英文 / 数字间的顿号应改为逗号加空格
 - **MAS005**：斜杠与中文之间应有空格
 - **MAS006**：超链接 [] 内中英文混排时英文左右应有空格
-- **MAS007**：数字与单位之间应有空格（如 10 Gbps、20 TB）
+- **MAS007**：数字与单位之间应有空格（如 10 Gbps, 20 TB）
 - **MAS008**：度数、百分号与数字之间不应有空格
 - **MAS009**：全形句读标点旁不应有空格
 
@@ -80,7 +80,7 @@ code --install-extension SWHL.markdown-auto-space
 
 ## 规则说明与示例
 
-规则码 MAS001–MAS009 的说明、输入 / 输出示例及配置方式见 **[规则说明文档](./docs/RULES.md)**（含与[中文文案排版指北](https://github.com/sparanoid/chinese-copywriting-guidelines)空格小节的对照）。**MAS007–MAS009** 对应指北中的数字与单位、度/百分号、全形标点旁空格等规则。
+规则码 MAS001–MAS009 的说明、输入 / 输出示例及配置方式见 **[规则说明文档](./docs/RULES.md)**（含与 [中文文案排版指北](https://github.com/sparanoid/chinese-copywriting-guidelines) 空格小节的对照）。**MAS007–MAS009** 对应指北中的数字与单位、度 / 百分号、全形标点旁空格等规则。
 
 ## 其他行为说明
 
@@ -123,8 +123,9 @@ code --install-extension SWHL.markdown-auto-space
 
 | 版本 | 摘要 |
 |------|------|
-| **0.0.6** | 新增 MAS007–MAS009（指北空格：数字与单位、度/%、全形标点旁空格）；诊断与配置同步。详见 [CHANGELOG.md](./CHANGELOG.md)。 |
-| 0.0.5 及更早 | MAS006、Web 版、诊断与 MAS001–MAS005 等，见 CHANGELOG。 |
+| **0.0.7** | 优化格式化稳定性与选区处理；新增按 tag 自动生成 Release 草稿并上传 `.vsix`；精简 CI 与发布链路。详见 [CHANGELOG.md](./CHANGELOG.md)。 |
+| 0.0.6 | 新增 MAS007–MAS009（指北空格：数字与单位、度 /%、全形标点旁空格）；诊断与配置同步。详见 [CHANGELOG.md](./CHANGELOG.md)。 |
+| 0.0.5 及更早 | MAS006, Web 版、诊断与 MAS001–MAS005 等，见 CHANGELOG。 |
 
 完整历史见 **[CHANGELOG.md](./CHANGELOG.md)**。
 
@@ -137,6 +138,37 @@ code --install-extension SWHL.markdown-auto-space
 3. 保存一个 `.md` 文件或执行命令「Markdown Auto Space」后，日志会记录是否激活、是否识别为 Markdown、是否产生编辑以及 `applyEdit` 是否成功
 
 若日志里出现「跳过: 非 Markdown 文件」，请确认当前文件右下角语言模式为 **Markdown**（点击可切换）。
+
+## 开发
+
+常用本地校验命令：
+
+```bash
+pnpm lint
+pnpm lint:fix
+pnpm typecheck
+pnpm test
+pnpm package:vsix
+```
+
+发版相关脚本也全部直接使用 `pnpm`，不依赖 `ni` / `nr` / `nci`。
+
+GitHub Actions 行为：
+
+- `CI` 会在 `push` 到 `main` 和 `pull_request` 时自动顺序执行 `lint`、`typecheck`、`build`、`test`
+- `Release` 会在你推送形如 `v*` 的 tag 时自动执行校验、打包 `.vsix`，并创建或更新同名版本的 GitHub Release 草稿
+- 生成的 `.vsix` 会自动上传到该版本的 Release 草稿附件中；同一 tag 重跑时会覆盖旧附件
+- `Release` 会校验 tag 是否等于 `v${package.json.version}`，避免 tag 版本与扩展版本漂移
+
+发布新版本时的操作步骤：
+
+1. 先把 `package.json` 中的 `version` 改成目标版本，例如 `0.0.7`
+2. 提交代码
+3. 打 tag，例如 `git tag v0.0.7`
+4. 推送 tag，例如 `git push origin v0.0.7`
+
+推送后，GitHub Actions 会自动校验版本一致性、打包 `.vsix`，并将产物放到 `v0.0.7` 对应的 Release 草稿下。
+如果只打了 `v0.0.7`，但 `package.json.version` 不是 `0.0.7`，Release workflow 会直接失败。
 
 ## 参考资料
 

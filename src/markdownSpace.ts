@@ -500,6 +500,43 @@ export function shouldSkipLine(line: string): boolean {
 /**
  *
  * @param content
+ */
+export function getSkippedLineIndices(content: string): Set<number> {
+  const lines = content.split('\n')
+  const skippedLineIndices = new Set<number>()
+  let inCodeBlock = false
+  let inYamlFrontMatter = false
+  let yamlFrontMatterCount = 0
+
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+    const line = lines[lineIndex]!
+    const stripped = line.trim()
+
+    if (stripped === '---') {
+      yamlFrontMatterCount += 1
+      if (yamlFrontMatterCount <= 2) {
+        inYamlFrontMatter = yamlFrontMatterCount === 1
+        skippedLineIndices.add(lineIndex)
+        continue
+      }
+    }
+
+    if (stripped.startsWith('```')) {
+      inCodeBlock = !inCodeBlock
+      skippedLineIndices.add(lineIndex)
+      continue
+    }
+
+    if (inCodeBlock || inYamlFrontMatter || /^(\t| {4})/.test(line))
+      skippedLineIndices.add(lineIndex)
+  }
+
+  return skippedLineIndices
+}
+
+/**
+ *
+ * @param content
  * @param rules
  */
 export function processMarkdownContent(
@@ -507,30 +544,12 @@ export function processMarkdownContent(
   rules: MarkdownSpaceRulesType = DEFAULT_RULES,
 ): string {
   const lines = content.split('\n')
+  const skippedLineIndices = getSkippedLineIndices(content)
   const newLines: string[] = []
-  let inCodeBlock = false
-  let inYamlFrontMatter = false
-  let yamlFrontMatterCount = 0
 
-  for (const line of lines) {
-    if (line.trim() === '---') {
-      yamlFrontMatterCount += 1
-      if (yamlFrontMatterCount <= 2)
-        inYamlFrontMatter = yamlFrontMatterCount === 1
-    }
-
-    if (line.trim().startsWith('```')) {
-      inCodeBlock = !inCodeBlock
-      newLines.push(line)
-      continue
-    }
-
-    if (inCodeBlock || inYamlFrontMatter) {
-      newLines.push(line)
-      continue
-    }
-
-    if (/^(\t| {4})/.test(line)) {
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+    const line = lines[lineIndex]!
+    if (skippedLineIndices.has(lineIndex)) {
       newLines.push(line)
       continue
     }
@@ -560,25 +579,12 @@ export function getMarkdownSpaceViolations(
   rules: MarkdownSpaceRulesType = DEFAULT_RULES,
 ): MarkdownSpaceViolation[] {
   const lines = content.split('\n')
+  const skippedLineIndices = getSkippedLineIndices(content)
   const out: MarkdownSpaceViolation[] = []
-  let inCodeBlock = false
-  let inYamlFrontMatter = false
-  let yamlFrontMatterCount = 0
 
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
     const line = lines[lineIndex]!
-    if (line.trim() === '---') {
-      yamlFrontMatterCount += 1
-      if (yamlFrontMatterCount <= 2)
-        inYamlFrontMatter = yamlFrontMatterCount === 1
-    }
-    if (line.trim().startsWith('```')) {
-      inCodeBlock = !inCodeBlock
-      continue
-    }
-    if (inCodeBlock || inYamlFrontMatter)
-      continue
-    if (/^(\t| {4})/.test(line))
+    if (skippedLineIndices.has(lineIndex))
       continue
 
     const lineViolations = getLineViolations(line, rules)

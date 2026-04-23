@@ -59,7 +59,6 @@ export function normalizeRules(rulesRaw: Record<string, boolean> | undefined): M
 export interface AutoSpaceConfigType {
   formatOnSave: boolean
   formatOnDocument: boolean
-  spaceType: 'all' | 'comment'
   rules: MarkdownSpaceRulesType
 }
 

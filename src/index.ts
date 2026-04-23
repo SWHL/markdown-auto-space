@@ -1,10 +1,7 @@
 import * as vscode from 'vscode'
-import type { Disposable } from 'vscode'
 import { getMarkdownAutoSpaceConfig, getMarkdownAutoSpaceDiagnostics, getMarkdownAutoSpaceEdits, getMarkdownAutoSpaceEditsForRange } from './utils'
 import { shouldRunFormatOnSave } from './type'
 
-let markdownAutoSpaceListener: Disposable
-let configurationListener: Disposable
 let outputChannel: vscode.OutputChannel
 let diagnosticCollection: vscode.DiagnosticCollection
 let diagnosticsDebounceTimer: ReturnType<typeof setTimeout> | undefined
@@ -125,18 +122,20 @@ export function activate(context: vscode.ExtensionContext) {
   })
   context.subscriptions.push(formatSelectionListener)
 
-  vscode.workspace.onWillSaveTextDocument((event) => {
-    const { formatOnSave } = getMarkdownAutoSpaceConfig()
-    const runFormat = shouldRunFormatOnSave(event.reason)
-    log(`onWillSave: ${event.document.uri.fsPath} formatOnSave=${formatOnSave} reason=${event.reason} runFormat=${runFormat}`)
-    if (formatOnSave && runFormat)
-      event.waitUntil(formatDocument(event.document))
-  })
+  context.subscriptions.push(
+    vscode.workspace.onWillSaveTextDocument((event) => {
+      const { formatOnSave } = getMarkdownAutoSpaceConfig()
+      const runFormat = shouldRunFormatOnSave(event.reason)
+      log(`onWillSave: ${event.document.uri.fsPath} formatOnSave=${formatOnSave} reason=${event.reason} runFormat=${runFormat}`)
+      if (formatOnSave && runFormat)
+        event.waitUntil(formatDocument(event.document))
+    }),
+  )
   // 监听格式化文档命令
   const formattingProvider = vscode.languages.registerDocumentFormattingEditProvider('markdown', {
     provideDocumentFormattingEdits: (document) => {
       const { formatOnDocument } = getMarkdownAutoSpaceConfig()
-      if (!formatOnDocument || !isFormatDocumentCommand())
+      if (!formatOnDocument)
         return []
 
       const text = document.getText()
@@ -144,28 +143,6 @@ export function activate(context: vscode.ExtensionContext) {
     },
   })
   context.subscriptions.push(formattingProvider)
-  // 全局变量来跟踪当前操作
-  let isFormatDocumentCommandActive = false
-  // 注册一个命令来设置标志
-  const formatDocumentCommand = vscode.commands.registerCommand('editor.action.formatDocument', async () => {
-    isFormatDocumentCommandActive = true
-    try {
-      await vscode.commands.executeCommand('editor.action.formatDocument.multiple')
-    }
-    finally {
-      isFormatDocumentCommandActive = false
-    }
-  })
-
-  /**
-   *
-   */
-  function isFormatDocumentCommand() {
-    return isFormatDocumentCommandActive
-  }
-
-  // 在 activate 函数中添加这个命令
-  context.subscriptions.push(formatDocumentCommand)
 
   // 诊断：在编辑器中标注违反「中英文加空格」规则的位置（类似 markdownlint）
   diagnosticCollection = vscode.languages.createDiagnosticCollection('markdown-auto-space')
@@ -182,22 +159,24 @@ export function activate(context: vscode.ExtensionContext) {
     diagnosticCollection.set(doc.uri, diagnostics)
   }
 
-  vscode.workspace.onDidOpenTextDocument((doc) => {
-    updateDiagnostics(doc)
-  })
-  vscode.workspace.onDidChangeTextDocument((e) => {
-    if (e.document.languageId !== 'markdown')
-      return
-    if (diagnosticsDebounceTimer)
-      clearTimeout(diagnosticsDebounceTimer)
-    diagnosticsDebounceTimer = setTimeout(() => {
-      diagnosticsDebounceTimer = undefined
-      updateDiagnostics(e.document)
-    }, 300)
-  })
-  vscode.workspace.onDidCloseTextDocument((doc) => {
-    diagnosticCollection.delete(doc.uri)
-  })
+  context.subscriptions.push(
+    vscode.workspace.onDidOpenTextDocument((doc) => {
+      updateDiagnostics(doc)
+    }),
+    vscode.workspace.onDidChangeTextDocument((e) => {
+      if (e.document.languageId !== 'markdown')
+        return
+      if (diagnosticsDebounceTimer)
+        clearTimeout(diagnosticsDebounceTimer)
+      diagnosticsDebounceTimer = setTimeout(() => {
+        diagnosticsDebounceTimer = undefined
+        updateDiagnostics(e.document)
+      }, 300)
+    }),
+    vscode.workspace.onDidCloseTextDocument((doc) => {
+      diagnosticCollection.delete(doc.uri)
+    }),
+  )
   // 已打开的文件初次诊断
   for (const doc of vscode.workspace.textDocuments)
     updateDiagnostics(doc)
@@ -207,8 +186,8 @@ export function activate(context: vscode.ExtensionContext) {
  *
  */
 export function deactivate() {
-  markdownAutoSpaceListener?.dispose()
-  configurationListener?.dispose()
+  if (diagnosticsDebounceTimer)
+    clearTimeout(diagnosticsDebounceTimer)
 }
 
 /**
