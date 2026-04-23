@@ -27,3 +27,10 @@ coverage
 
 # VS Code extension pack artifact
 *.vsix
+
+# Marketplace source assets
+res/*.svg
+res/marketplace-hero*
+res/marketplace-save*
+res/marketplace-diagnostics*
+docs/marketplace-demo.md

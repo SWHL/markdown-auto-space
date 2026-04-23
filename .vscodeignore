@@ -26,3 +26,10 @@ test
 .DS_Store
 coverage
 *.tgz
+
+# Marketplace source assets
+res/*.svg
+res/marketplace-hero*
+res/marketplace-save*
+res/marketplace-diagnostics*
+docs/marketplace-demo.md
