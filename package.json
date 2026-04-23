@@ -2,7 +2,7 @@
   "publisher": "SWHL",
   "name": "markdown-auto-space",
   "displayName": "Markdown Auto Space",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "private": true,
   "packageManager": "pnpm@9.14.1",
   "description": "Auto add space between Chinese and English in Markdown when you save file",
