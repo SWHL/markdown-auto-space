@@ -34,11 +34,11 @@
     "commands": [
       {
         "command": "extension.markdownAutoSpace",
-        "title": "Markdown Auto Space: 对当前文档执行中英文加空格"
+        "title": "Markdown Auto Space: Format Markdown Spacing"
       },
       {
         "command": "extension.markdownAutoSpaceFormatSelection",
-        "title": "Markdown Auto Space: 仅格式化选中行/选区"
+        "title": "Markdown Auto Space: Format Selection"
       }
     ],
     "menus": {

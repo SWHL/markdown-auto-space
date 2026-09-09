@@ -88,8 +88,8 @@ code --install-extension SWHL.markdown-auto-space
 
 ### 2. Format document or selection
 
-- 命令面板运行 `Markdown Auto Space: Format Markdown Spacing / 对当前文档执行中英文加空格`
-- 命令面板运行 `Markdown Auto Space: Format Selection / 仅格式化选中行/选区`
+- 命令面板运行 `Markdown Auto Space: Format Markdown Spacing`
+- 命令面板运行 `Markdown Auto Space: Format Selection`
 - 也可以从编辑器标题栏或右键菜单触发
 
 ### 3. See diagnostics before fixing
