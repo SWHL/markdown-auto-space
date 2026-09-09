@@ -2,6 +2,16 @@
 
 本文档记录本项目的所有重要变更，格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [0.0.9] - 2026-09-09
+
+### 修复
+
+- **修复保存后残留诊断**：修复问题 [#6](https://github.com/SWHL/markdown-auto-space/issues/6)，解决 MAS009 自动移除全形标点后的多余空格后，编辑器波浪线和问题面板仍残留旧诊断的问题。现在格式化编辑应用后及文档保存完成后都会刷新诊断。
+
+### 变更
+
+- **右键菜单命令改为英文**：将编辑器右键菜单中的格式化命令标题改为 `Format Markdown Spacing` 和 `Format Selection`，便于英文界面用户识别。
+
 ## [0.0.8] - 2026-04-23
 
 ### 新增
