@@ -15,6 +15,19 @@ function log(msg: string) {
 }
 
 /**
+ * Recompute diagnostics from the document's current contents.
+ * This is also called after save-time edits because an edit made from
+ * onWillSave is not guaranteed to produce a timely onDidChange refresh.
+ * @param doc
+ */
+function updateDiagnostics(doc: vscode.TextDocument) {
+  if (doc.languageId !== 'markdown' || !diagnosticCollection)
+    return
+  const diagnostics = getMarkdownAutoSpaceDiagnostics(doc, doc.getText())
+  diagnosticCollection.set(doc.uri, diagnostics)
+}
+
+/**
  * 对文档执行加空格并应用编辑（保存时或格式化时调用）
  * @param document
  */
@@ -30,6 +43,7 @@ async function formatDocument(document: vscode.TextDocument) {
     const edits = getMarkdownAutoSpaceEdits(document, text)
     if (!edits?.length) {
       log(`  无编辑或无需修改`)
+      updateDiagnostics(document)
       return
     }
 
@@ -38,6 +52,7 @@ async function formatDocument(document: vscode.TextDocument) {
     workspaceEdit.set(document.uri, edits)
     const applied = await vscode.workspace.applyEdit(workspaceEdit)
     log(`  applyEdit 结果: ${applied}`)
+    updateDiagnostics(document)
   }
   catch (err) {
     log(`  错误: ${err instanceof Error ? err.message : String(err)}`)
@@ -84,6 +99,7 @@ export function activate(context: vscode.ExtensionContext) {
     workspaceEdit.set(document.uri, edits)
     const applied = await vscode.workspace.applyEdit(workspaceEdit)
     log(`  applyEdit 结果: ${applied}`)
+    updateDiagnostics(document)
     if (applied)
       void vscode.window.showInformationMessage(`Markdown Auto Space: 已应用 ${edits.length} 处修改。`)
   })
@@ -117,6 +133,7 @@ export function activate(context: vscode.ExtensionContext) {
     workspaceEdit.set(document.uri, edits)
     const applied = await vscode.workspace.applyEdit(workspaceEdit)
     log(`  应用选中区编辑 结果: ${applied}`)
+    updateDiagnostics(document)
     if (applied)
       void vscode.window.showInformationMessage('Markdown Auto Space: 已格式化选中内容。')
   })
@@ -148,17 +165,6 @@ export function activate(context: vscode.ExtensionContext) {
   diagnosticCollection = vscode.languages.createDiagnosticCollection('markdown-auto-space')
   context.subscriptions.push(diagnosticCollection)
 
-  /**
-   *
-   * @param doc
-   */
-  function updateDiagnostics(doc: vscode.TextDocument) {
-    if (doc.languageId !== 'markdown')
-      return
-    const diagnostics = getMarkdownAutoSpaceDiagnostics(doc, doc.getText())
-    diagnosticCollection.set(doc.uri, diagnostics)
-  }
-
   context.subscriptions.push(
     vscode.workspace.onDidOpenTextDocument((doc) => {
       updateDiagnostics(doc)
@@ -172,6 +178,10 @@ export function activate(context: vscode.ExtensionContext) {
         diagnosticsDebounceTimer = undefined
         updateDiagnostics(e.document)
       }, 300)
+    }),
+    // Final refresh after save clears diagnostics left behind by save-time edits.
+    vscode.workspace.onDidSaveTextDocument((doc) => {
+      updateDiagnostics(doc)
     }),
     vscode.workspace.onDidCloseTextDocument((doc) => {
       diagnosticCollection.delete(doc.uri)

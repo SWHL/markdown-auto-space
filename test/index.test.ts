@@ -12,7 +12,7 @@ import {
 } from '../src/markdownSpace'
 import { DEFAULT_MARKDOWN_SPACE_RULES, MANUAL_SAVE_REASON, RULES_DOC_BASE_URL, getRuleDocUrl, normalizeRules, shouldRunFormatOnSave } from '../src/type'
 import type { MarkdownSpaceRulesType } from '../src/type'
-import { getMarkdownAutoSpaceConfig, getMarkdownAutoSpaceEdits, getMarkdownAutoSpaceEditsForRange } from '../src/utils'
+import { getMarkdownAutoSpaceConfig, getMarkdownAutoSpaceDiagnostics, getMarkdownAutoSpaceEdits, getMarkdownAutoSpaceEditsForRange } from '../src/utils'
 
 vi.mock('vscode', () => {
   class Range {
@@ -94,10 +94,17 @@ function createMockDocument(text: string, languageId = 'markdown') {
     },
     lineAt(line: number) {
       const lineText = lines[line]!
+      const start = {
+        line,
+        character: 0,
+        translate(lineDelta: number, characterDelta: number) {
+          return { line: line + lineDelta, character: characterDelta }
+        },
+      }
       return {
         text: lineText,
         range: {
-          start: { line, character: 0 },
+          start,
           end: { line, character: lineText.length },
         },
       }
@@ -493,6 +500,18 @@ describe('getMarkdownAutoSpaceEdits', () => {
   it('非 Markdown 文档不返回 edit', () => {
     const document = createMockDocument('中文English', 'plaintext')
     expect(getMarkdownAutoSpaceEdits(document, '中文English')).toBeUndefined()
+  })
+})
+
+describe('getMarkdownAutoSpaceDiagnostics', () => {
+  it('MAS009 修复后的文本不再产生诊断', () => {
+    const original = '生成器： '
+    const document = createMockDocument(original)
+    expect(getMarkdownAutoSpaceDiagnostics(document, original)).toHaveLength(1)
+
+    const formatted = processMarkdownContent(original, DEFAULT_MARKDOWN_SPACE_RULES)
+    expect(formatted).toBe('生成器：')
+    expect(getMarkdownAutoSpaceDiagnostics(document, formatted)).toHaveLength(0)
   })
 })
 
