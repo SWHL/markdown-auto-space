@@ -132,10 +132,16 @@ code --install-extension SWHL.markdown-auto-space
 - 自动保存、失焦保存不会触发 `formatOnSave`
 - 未选中内容时，“格式化选中”会处理当前光标所在行
 - 无需修改时不会产生空编辑，避免文档脏状态抖动
+- 文档开头的 YAML front matter 不参与格式化和诊断；正文中的水平分隔线不会影响后续内容处理
+- 未闭合的 YAML front matter 采用保守策略，后续内容不会被修改或诊断
 
 ## Rule docs
 
 更完整的规则说明、输入输出示例和与《中文文案排版指北》的对应关系见 [docs/RULES.md](./docs/RULES.md)。
+
+## Development roadmap
+
+后续稳定性、用户体验、规则覆盖和工程质量改进项见 [docs/ROADMAP.md](./docs/ROADMAP.md)。路线图按优先级列出了问题背景、建议方案和验收标准，便于逐项实现。
 
 ## Changelog
 

@@ -451,6 +451,33 @@ describe('getSkippedLineIndices', () => {
     const skipped = getSkippedLineIndices('---\ntitle: 测试\n---\n```ts\n中文English\n```\n    中文English\n正文English')
     expect([...skipped]).toEqual([0, 1, 2, 3, 4, 5, 6])
   })
+
+  it('无 front matter 时正常处理全文，多条正文水平线不改变解析状态', () => {
+    const content = '正文English\n---\n中间中文English\n---\n后续中文English'
+    const skipped = getSkippedLineIndices(content)
+    expect([...skipped]).toEqual([1, 3])
+    expect(processMarkdownContent(content)).toBe('正文 English\n---\n中间中文 English\n---\n后续中文 English')
+  })
+
+  it('未闭合的开头 YAML front matter 保守跳过其后内容', () => {
+    const content = '---\ntitle: 中文English\n正文中文English'
+    expect([...getSkippedLineIndices(content)]).toEqual([0, 1, 2])
+    expect(processMarkdownContent(content)).toBe(content)
+    expect(getMarkdownSpaceViolations(content, DEFAULT_MARKDOWN_SPACE_RULES)).toHaveLength(0)
+  })
+
+  it('首行缩进的分隔线不作为 YAML front matter', () => {
+    const content = '  ---\n正文中文English'
+    expect(processMarkdownContent(content)).toBe('  ---\n正文中文 English')
+  })
+
+  it('开头 YAML front matter 不被格式化或诊断，闭合后正文继续处理', () => {
+    const content = '---\ntitle: 中文English\n---\n正文中文English\n---\n后续中文English'
+    expect(processMarkdownContent(content)).toBe('---\ntitle: 中文English\n---\n正文中文 English\n---\n后续中文 English')
+    const violations = getMarkdownSpaceViolations(content, DEFAULT_MARKDOWN_SPACE_RULES)
+    expect(violations).toHaveLength(2)
+    expect(violations.every(v => v.lineIndex === 3 || v.lineIndex === 5)).toBe(true)
+  })
 })
 
 describe('DEFAULT_MARKDOWN_SPACE_RULES', () => {

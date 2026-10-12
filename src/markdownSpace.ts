@@ -505,20 +505,28 @@ export function getSkippedLineIndices(content: string): Set<number> {
   const lines = content.split('\n')
   const skippedLineIndices = new Set<number>()
   let inCodeBlock = false
-  let inYamlFrontMatter = false
-  let yamlFrontMatterCount = 0
+  const isYamlDelimiter = (line: string) => line === '---' || line === '---\r'
+  // YAML front matter is only valid when the document starts with its opening
+  // delimiter. An unclosed block remains protected to avoid modifying content
+  // whose metadata boundary is ambiguous.
+  let inYamlFrontMatter = isYamlDelimiter(lines[0] ?? '')
 
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
     const line = lines[lineIndex]!
     const stripped = line.trim()
 
+    if (inYamlFrontMatter) {
+      skippedLineIndices.add(lineIndex)
+      if (lineIndex > 0 && isYamlDelimiter(line))
+        inYamlFrontMatter = false
+      continue
+    }
+
+    // A horizontal rule is inert in the body; keep the marker itself
+    // untouched without changing any parser state.
     if (stripped === '---') {
-      yamlFrontMatterCount += 1
-      if (yamlFrontMatterCount <= 2) {
-        inYamlFrontMatter = yamlFrontMatterCount === 1
-        skippedLineIndices.add(lineIndex)
-        continue
-      }
+      skippedLineIndices.add(lineIndex)
+      continue
     }
 
     if (stripped.startsWith('```')) {

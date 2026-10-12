@@ -2,6 +2,12 @@
 
 本文档记录本项目的所有重要变更，格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [未发布]
+
+### 修复
+
+- **修复 YAML front matter 识别**：仅将文档第一行的 `---` 视为 front matter 起点；正文中的水平分隔线不再导致后续正文被跳过。未闭合的 front matter 采用保守策略，不修改或诊断其后的内容。
+
 ## [0.0.9] - 2026-09-09
 
 ### 修复
