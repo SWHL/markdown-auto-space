@@ -141,10 +141,6 @@ code --install-extension SWHL.markdown-auto-space
 
 更完整的规则说明、输入输出示例和与《中文文案排版指北》的对应关系见 [docs/RULES.md](./docs/RULES.md)。
 
-## Development roadmap
-
-后续稳定性、用户体验、规则覆盖和工程质量改进项见 [docs/ROADMAP.md](./docs/ROADMAP.md)。路线图按优先级列出了问题背景、建议方案和验收标准，便于逐项实现。
-
 ## Changelog
 
 | 版本 | 摘要 |
