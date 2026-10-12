@@ -480,6 +480,39 @@ export function addSpacesInText(text: string, apply = true): string {
   return result
 }
 
+interface FencedCodeMarker {
+  char: '`' | '~'
+  length: number
+}
+
+/**
+ * 识别最多 3 个空格缩进的围栏起始行。围栏后的内容作为语言标识等信息，
+ * 不参与围栏长度判断；反引号围栏的 info string 不能再包含反引号。
+ */
+function parseFenceOpening(line: string): FencedCodeMarker | null {
+  const match = /^( {0,3})(`{3,}|~{3,})(.*)$/.exec(line)
+  if (!match)
+    return null
+  const marker = match[2]!
+  if (marker[0] === '`' && match[3]!.includes('`'))
+    return null
+  return { char: marker[0] as '`' | '~', length: marker.length }
+}
+
+/** 识别围栏结束行；结束行只能包含围栏和空白。 */
+function parseFenceClosing(line: string): FencedCodeMarker | null {
+  const match = /^( {0,3})(`{3,}|~{3,})[ \t\r]*$/.exec(line)
+  if (!match)
+    return null
+  const marker = match[2]!
+  return { char: marker[0] as '`' | '~', length: marker.length }
+}
+
+function closesFence(line: string, opening: FencedCodeMarker): boolean {
+  const closing = parseFenceClosing(line)
+  return closing !== null && closing.char === opening.char && closing.length >= opening.length
+}
+
 /**
  *
  * @param line
@@ -488,7 +521,9 @@ export function shouldSkipLine(line: string): boolean {
   const stripped = line.trim()
   if (stripped === '---')
     return true
-  if (stripped.startsWith('```'))
+  if (parseFenceOpening(line) !== null || parseFenceClosing(line) !== null)
+    return true
+  if (/^(\t| {4})/.test(line))
     return true
   if (stripped.startsWith('<') && stripped.endsWith('>'))
     return true
@@ -504,7 +539,7 @@ export function shouldSkipLine(line: string): boolean {
 export function getSkippedLineIndices(content: string): Set<number> {
   const lines = content.split('\n')
   const skippedLineIndices = new Set<number>()
-  let inCodeBlock = false
+  let codeFence: FencedCodeMarker | null = null
   const isYamlDelimiter = (line: string) => line === '---' || line === '---\r'
   // YAML front matter is only valid when the document starts with its opening
   // delimiter. An unclosed block remains protected to avoid modifying content
@@ -529,13 +564,21 @@ export function getSkippedLineIndices(content: string): Set<number> {
       continue
     }
 
-    if (stripped.startsWith('```')) {
-      inCodeBlock = !inCodeBlock
+    if (codeFence !== null) {
+      skippedLineIndices.add(lineIndex)
+      if (closesFence(line, codeFence))
+        codeFence = null
+      continue
+    }
+
+    const opening = parseFenceOpening(line)
+    if (opening !== null) {
+      codeFence = opening
       skippedLineIndices.add(lineIndex)
       continue
     }
 
-    if (inCodeBlock || inYamlFrontMatter || /^(\t| {4})/.test(line))
+    if (inYamlFrontMatter || /^(\t| {4})/.test(line))
       skippedLineIndices.add(lineIndex)
   }
 

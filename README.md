@@ -61,7 +61,7 @@ Format Chinese-English spacing in Markdown for VS Code.
 - 独立 URL：`https://...`
 - 双引号 / 单引号内容
 - HTML 标签
-- 围栏代码块、缩进代码块、YAML front matter
+- 围栏代码块（反引号 / 波浪线，支持语言标识和不同围栏长度）、缩进代码块、YAML front matter
 
 也就是说，它针对的是 Markdown 文案排版，不是代码美化器。
 
@@ -134,6 +134,8 @@ code --install-extension SWHL.markdown-auto-space
 - 无需修改时不会产生空编辑，避免文档脏状态抖动
 - 文档开头的 YAML front matter 不参与格式化和诊断；正文中的水平分隔线不会影响后续内容处理
 - 未闭合的 YAML front matter 采用保守策略，后续内容不会被修改或诊断
+- 围栏代码块支持反引号和波浪线，起始围栏为 3 个或更多字符；只有相同字符且长度不短于起始围栏的结束标记才会闭合代码块
+- 未闭合的围栏代码块采用保守策略，后续内容不会被修改或诊断
 
 ## Rule docs
 
@@ -161,6 +163,12 @@ pnpm lint
 pnpm typecheck
 pnpm test
 pnpm package:vsix
+```
+
+围栏代码块相关测试可单独运行：
+
+```bash
+pnpm exec vitest run -t "围栏"
 ```
 
 ## References

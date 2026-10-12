@@ -443,6 +443,9 @@ describe('shouldSkipLine', () => {
   it('YAML 分隔线与围栏行视为跳过（由 processMarkdownContent 处理）', () => {
     expect(shouldSkipLine('---')).toBe(true)
     expect(shouldSkipLine('```ts')).toBe(true)
+    expect(shouldSkipLine('~~~ts')).toBe(true)
+    expect(shouldSkipLine('  ````')).toBe(true)
+    expect(shouldSkipLine('    ```ts')).toBe(true)
   })
 })
 
@@ -450,6 +453,24 @@ describe('getSkippedLineIndices', () => {
   it('统一识别 YAML、围栏代码块和缩进代码块', () => {
     const skipped = getSkippedLineIndices('---\ntitle: 测试\n---\n```ts\n中文English\n```\n    中文English\n正文English')
     expect([...skipped]).toEqual([0, 1, 2, 3, 4, 5, 6])
+  })
+
+  it('支持波浪线围栏、语言标识和不同长度的闭合围栏', () => {
+    const content = '正文中文English\n~~~ts\n代码中文English\n~~~~\n后续中文English'
+    expect(processMarkdownContent(content)).toBe('正文中文 English\n~~~ts\n代码中文English\n~~~~\n后续中文 English')
+    expect(getMarkdownSpaceViolations(content, DEFAULT_MARKDOWN_SPACE_RULES).map(v => v.lineIndex)).toEqual([0, 4])
+  })
+
+  it('只允许相同字符且不短于起始围栏的标记闭合', () => {
+    const content = '````js\n代码中文English\n```\n~~~\n仍在代码中文English\n`````\n正文中文English'
+    expect(processMarkdownContent(content)).toBe('````js\n代码中文English\n```\n~~~\n仍在代码中文English\n`````\n正文中文 English')
+    expect([...getSkippedLineIndices(content)]).toEqual([0, 1, 2, 3, 4, 5])
+  })
+
+  it('未闭合围栏保守跳过后续内容，并支持最多 3 个缩进空格', () => {
+    const content = '正文中文English\n  ~~~python\n代码中文English\n后续中文English'
+    expect(processMarkdownContent(content)).toBe('正文中文 English\n  ~~~python\n代码中文English\n后续中文English')
+    expect([...getSkippedLineIndices(content)]).toEqual([1, 2, 3])
   })
 
   it('无 front matter 时正常处理全文，多条正文水平线不改变解析状态', () => {
