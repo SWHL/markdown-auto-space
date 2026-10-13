@@ -90,6 +90,29 @@ function flushDiagnosticsUpdate(doc: vscode.TextDocument) {
   updateDiagnostics(doc)
 }
 
+function refreshDiagnosticsForConfigurationChange(event: vscode.ConfigurationChangeEvent) {
+  const diagnosticsChanged = event.affectsConfiguration('markdownAutoSpace.diagnostics.enable')
+  const rulesChanged = event.affectsConfiguration('markdownAutoSpace.rules')
+  if (!diagnosticsChanged && !rulesChanged)
+    return
+
+  const diagnosticsEnabled = vscode.workspace
+    .getConfiguration('markdownAutoSpace')
+    .get('diagnostics.enable') as boolean | undefined
+  if (diagnosticsEnabled === false) {
+    for (const timer of diagnosticsDebounceTimers.values())
+      clearTimeout(timer)
+    diagnosticsDebounceTimers.clear()
+    diagnosticCollection.clear()
+    return
+  }
+
+  for (const doc of vscode.workspace.textDocuments) {
+    if (doc.languageId === 'markdown')
+      flushDiagnosticsUpdate(doc)
+  }
+}
+
 /**
  *
  * @param context
@@ -206,6 +229,9 @@ export function activate(context: vscode.ExtensionContext) {
     // Final refresh after save clears diagnostics left behind by save-time edits.
     vscode.workspace.onDidSaveTextDocument((doc) => {
       flushDiagnosticsUpdate(doc)
+    }),
+    vscode.workspace.onDidChangeConfiguration((event) => {
+      refreshDiagnosticsForConfigurationChange(event)
     }),
     vscode.workspace.onDidCloseTextDocument((doc) => {
       cancelDiagnosticsUpdate(doc)

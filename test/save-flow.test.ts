@@ -9,12 +9,16 @@ const mock = vi.hoisted(() => {
     didSave: [] as Array<(document: any) => void>,
     didClose: [] as Array<(document: any) => void>,
     didOpen: [] as Array<(document: any) => void>,
+    didChangeConfiguration: [] as Array<(event: any) => void>,
   }
   const state = {
     formatOnSave: true,
+    diagnosticsEnable: true,
+    textDocuments: [] as any[],
     applyEdit: vi.fn(async () => true),
     diagnosticSet: vi.fn(),
     diagnosticDelete: vi.fn(),
+    diagnosticClear: vi.fn(),
   }
   return { events, state }
 })
@@ -54,11 +58,12 @@ vi.mock('vscode', () => {
       createDiagnosticCollection: () => ({
         set: mock.state.diagnosticSet,
         delete: mock.state.diagnosticDelete,
+        clear: mock.state.diagnosticClear,
         dispose: vi.fn(),
       }),
     },
     workspace: {
-      textDocuments: [],
+      textDocuments: mock.state.textDocuments,
       getConfiguration: () => ({
         get: (key: string) => {
           if (key === 'formatOnSave')
@@ -66,7 +71,7 @@ vi.mock('vscode', () => {
           if (key === 'formatOnDocument')
             return false
           if (key === 'diagnostics.enable')
-            return true
+            return mock.state.diagnosticsEnable
           return undefined
         },
       }),
@@ -76,6 +81,7 @@ vi.mock('vscode', () => {
       onDidSaveTextDocument: register('didSave'),
       onDidCloseTextDocument: register('didClose'),
       onDidOpenTextDocument: register('didOpen'),
+      onDidChangeConfiguration: register('didChangeConfiguration'),
     },
   }
 })
@@ -109,10 +115,14 @@ describe('save event flow', () => {
     mock.events.didSave.length = 0
     mock.events.didClose.length = 0
     mock.events.didOpen.length = 0
+    mock.events.didChangeConfiguration.length = 0
     mock.state.formatOnSave = true
+    mock.state.diagnosticsEnable = true
+    mock.state.textDocuments.length = 0
     mock.state.applyEdit.mockClear()
     mock.state.diagnosticSet.mockClear()
     mock.state.diagnosticDelete.mockClear()
+    mock.state.diagnosticClear.mockClear()
     activate({ subscriptions: [] } as any)
   })
 
@@ -164,5 +174,31 @@ describe('save event flow', () => {
     deactivate()
     vi.runAllTimers()
     expect(mock.state.diagnosticSet).not.toHaveBeenCalled()
+  })
+
+  it('相关配置变化时立即刷新所有已打开 Markdown 文档', () => {
+    const document = createDocument()
+    mock.state.textDocuments.push(document)
+    mock.events.didChangeConfiguration[0]!({
+      affectsConfiguration: (key: string) => key === 'markdownAutoSpace.rules',
+    })
+    expect(mock.state.diagnosticSet).toHaveBeenCalledWith(document.uri, expect.any(Array))
+  })
+
+  it('关闭诊断时立即清空集合', () => {
+    mock.state.diagnosticsEnable = false
+    mock.events.didChangeConfiguration[0]!({
+      affectsConfiguration: (key: string) => key === 'markdownAutoSpace.diagnostics.enable',
+    })
+    expect(mock.state.diagnosticClear).toHaveBeenCalledTimes(1)
+  })
+
+  it('无关配置变化不会刷新诊断', () => {
+    mock.state.diagnosticSet.mockClear()
+    mock.events.didChangeConfiguration[0]!({
+      affectsConfiguration: () => false,
+    })
+    expect(mock.state.diagnosticSet).not.toHaveBeenCalled()
+    expect(mock.state.diagnosticClear).not.toHaveBeenCalled()
   })
 })
