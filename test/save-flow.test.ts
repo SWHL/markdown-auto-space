@@ -131,7 +131,7 @@ describe('save event flow', () => {
 
     expect(waits).toHaveLength(1)
     await expect(waits[0]).resolves.toEqual([
-      expect.objectContaining({ newText: '中文 English' }),
+      expect.objectContaining({ newText: ' ' }),
     ])
     expect(mock.state.applyEdit).not.toHaveBeenCalled()
   })

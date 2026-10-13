@@ -5,6 +5,130 @@ import { addSpacesBetweenChineseAndAlnum, getMarkdownSpaceViolations, getSkipped
 import type { AutoSpaceConfigType } from './type'
 import { getRuleDocUrl, normalizeRules } from './type'
 
+interface TextChange {
+  start: number
+  end: number
+  newText: string
+}
+
+/**
+ * 根据原文和格式化结果生成最小的、按原文偏移排序的编辑。
+ * 格式化规则主要由空格插入/删除和少量字符替换组成，线性扫描即可避免
+ * 为大文档构造 O(n²) 的通用字符串 diff，同时保持换行符不被触碰。
+ */
+function getMinimalLineChanges(original: string, updated: string): TextChange[] {
+  const changes: TextChange[] = []
+  let originalIndex = 0
+  let updatedIndex = 0
+
+  const append = (change: TextChange) => {
+    const previous = changes[changes.length - 1]
+    if (previous && previous.end === change.start) {
+      previous.end = change.end
+      previous.newText += change.newText
+    }
+    else {
+      changes.push(change)
+    }
+  }
+
+  while (originalIndex < original.length || updatedIndex < updated.length) {
+    if (originalIndex < original.length
+      && updatedIndex < updated.length
+      && original[originalIndex] === updated[updatedIndex]) {
+      originalIndex += 1
+      updatedIndex += 1
+      continue
+    }
+
+    // The formatter inserts spaces without consuming an original character.
+    if (/\s/.test(updated[updatedIndex] ?? '') && !/\s/.test(original[originalIndex] ?? '')) {
+      append({ start: originalIndex, end: originalIndex, newText: updated[updatedIndex]! })
+      updatedIndex += 1
+      continue
+    }
+
+    // The formatter removes redundant whitespace from the original text.
+    if (/\s/.test(original[originalIndex] ?? '') && !/\s/.test(updated[updatedIndex] ?? '')) {
+      append({ start: originalIndex, end: originalIndex + 1, newText: '' })
+      originalIndex += 1
+      continue
+    }
+
+    // Covers punctuation changes such as 顿号 -> comma.
+    if (originalIndex < original.length && updatedIndex < updated.length) {
+      append({ start: originalIndex, end: originalIndex + 1, newText: updated[updatedIndex]! })
+      originalIndex += 1
+      updatedIndex += 1
+      continue
+    }
+
+    if (originalIndex < original.length) {
+      append({ start: originalIndex, end: originalIndex + 1, newText: '' })
+      originalIndex += 1
+    }
+    else {
+      append({ start: originalIndex, end: originalIndex, newText: updated[updatedIndex]! })
+      updatedIndex += 1
+    }
+  }
+
+  return changes
+}
+
+function getMinimalTextChanges(original: string, updated: string): TextChange[] {
+  const changes: TextChange[] = []
+  const originalLines = original.split(/\r\n|\n/)
+  const updatedLines = updated.split(/\r\n|\n/)
+  const originalBreaks = original.match(/\r\n|\n/g) ?? []
+  let originalOffset = 0
+
+  for (let line = 0; line < originalLines.length; line++) {
+    const originalLine = originalLines[line]!
+    const updatedLine = updatedLines[line]!
+    for (const change of getMinimalLineChanges(originalLine, updatedLine))
+      changes.push({ start: originalOffset + change.start, end: originalOffset + change.end, newText: change.newText })
+    originalOffset += originalLine.length + (originalBreaks[line]?.length ?? 0)
+  }
+  return changes
+}
+
+function getMinimalTextEdits(
+  document: TextDocument,
+  original: string,
+  updated: string,
+  baseOffset = 0,
+): TextEdit[] | undefined {
+  if (original === updated)
+    return undefined
+  const changes = getMinimalTextChanges(original, updated)
+  if (changes.length === 0)
+    return undefined
+
+  return changes.map(({ start, end, newText }) => TextEdit.replace(
+    new Range(
+      document.positionAt(baseOffset + start),
+      document.positionAt(baseOffset + end),
+    ),
+    newText,
+  ))
+}
+
+function getDocumentOffset(document: TextDocument, position: { line: number, character: number }): number {
+  type DocumentWithOptionalOffsetAt = TextDocument & {
+    offsetAt?: (value: { line: number, character: number }) => number
+  }
+  const offsetAt = (document as DocumentWithOptionalOffsetAt).offsetAt
+  if (offsetAt)
+    return offsetAt.call(document, position)
+
+  const lines = document.getText().split('\n')
+  let offset = 0
+  for (let line = 0; line < position.line; line++)
+    offset += (lines[line]?.length ?? 0) + 1
+  return offset + position.character
+}
+
 /**
  *
  */
@@ -43,13 +167,7 @@ export function getMarkdownAutoSpaceEdits(
 
   const { rules } = getMarkdownAutoSpaceConfig()
   const updatedText = processMarkdownContent(text, rules)
-  if (updatedText === text)
-    return undefined
-  const fullRange = new Range(
-    document.positionAt(0),
-    document.positionAt(text.length),
-  )
-  return [TextEdit.replace(fullRange, updatedText)]
+  return getMinimalTextEdits(document, text, updatedText)
 }
 
 /**
@@ -68,7 +186,7 @@ export function getMarkdownAutoSpaceEditsForRange(
     return undefined
   const { rules } = getMarkdownAutoSpaceConfig()
   const skippedLineIndices = getSkippedLineIndices(document.getText())
-  const formattedLines: string[] = []
+  const edits: TextEdit[] = []
 
   for (let lineIndex = range.start.line; lineIndex <= range.end.line; lineIndex++) {
     const line = document.lineAt(lineIndex)
@@ -76,18 +194,15 @@ export function getMarkdownAutoSpaceEditsForRange(
     const lineEnd = lineIndex === range.end.line ? range.end.character : line.text.length
     const selectedText = line.text.slice(lineStart, lineEnd)
 
-    if (skippedLineIndices.has(lineIndex)) {
-      formattedLines.push(selectedText)
+    if (skippedLineIndices.has(lineIndex))
       continue
-    }
 
-    formattedLines.push(addSpacesBetweenChineseAndAlnum(selectedText, rules))
+    const formattedText = addSpacesBetweenChineseAndAlnum(selectedText, rules)
+    const baseOffset = getDocumentOffset(document, { line: lineIndex, character: lineStart })
+    edits.push(...(getMinimalTextEdits(document, selectedText, formattedText, baseOffset) ?? []))
   }
 
-  const newText = formattedLines.join('\n')
-  if (newText === text)
-    return undefined
-  return [TextEdit.replace(range, newText)]
+  return edits.length ? edits : undefined
 }
 
 /**
@@ -147,11 +262,5 @@ export function markdownAutoSpace(text: string) {
 
   const { rules } = getMarkdownAutoSpaceConfig()
   const updatedText = processMarkdownContent(text, rules)
-  if (updatedText === text)
-    return
-  const fullRange = new Range(
-    document.positionAt(0),
-    document.positionAt(text.length),
-  )
-  return [TextEdit.replace(fullRange, updatedText)]
+  return getMinimalTextEdits(document, text, updatedText)
 }

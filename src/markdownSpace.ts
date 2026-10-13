@@ -594,7 +594,8 @@ export function processMarkdownContent(
   content: string,
   rules: MarkdownSpaceRulesType = DEFAULT_RULES,
 ): string {
-  const lines = content.split('\n')
+  const lines = content.split(/\r\n|\n/)
+  const lineBreaks = content.match(/\r\n|\n/g) ?? []
   const skippedLineIndices = getSkippedLineIndices(content)
   const newLines: string[] = []
 
@@ -608,7 +609,7 @@ export function processMarkdownContent(
     newLines.push(addSpacesBetweenChineseAndAlnum(line, rules))
   }
 
-  return newLines.join('\n')
+  return newLines.map((line, index) => line + (lineBreaks[index] ?? '')).join('')
 }
 
 export interface MarkdownSpaceViolation {

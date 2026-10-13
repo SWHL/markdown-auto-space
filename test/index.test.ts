@@ -85,6 +85,9 @@ function createMockDocument(text: string, languageId = 'markdown') {
   return {
     languageId,
     lineCount: lines.length,
+    offsetAt(position: { line: number, character: number }) {
+      return lineOffsets[position.line]! + position.character
+    },
     getText(range?: { start: { line: number, character: number }, end: { line: number, character: number } }) {
       if (!range)
         return text
@@ -93,7 +96,7 @@ function createMockDocument(text: string, languageId = 'markdown') {
       return text.slice(startOffset, endOffset)
     },
     lineAt(line: number) {
-      const lineText = lines[line]!
+      const lineText = lines[line]!.replace(/\r$/, '')
       const start = {
         line,
         character: 0,
@@ -113,9 +116,18 @@ function createMockDocument(text: string, languageId = 'markdown') {
       let line = 0
       while (line + 1 < lineOffsets.length && lineOffsets[line + 1]! <= offset)
         line += 1
-      return { line, character: offset - lineOffsets[line]! }
+      return { line, character: Math.min(offset - lineOffsets[line]!, lines[line]!.replace(/\r$/, '').length) }
     },
   } as Parameters<typeof getMarkdownAutoSpaceEdits>[0]
+}
+
+/** Apply edits against original offsets, as VS Code does for a single batch. */
+function applyEdits(text: string, document: ReturnType<typeof createMockDocument>, edits: ReturnType<typeof getMarkdownAutoSpaceEdits>) {
+  return [...(edits ?? [])].reverse().reduce((result, edit) => {
+    const start = document.offsetAt(edit.range.start)
+    const end = document.offsetAt(edit.range.end)
+    return result.slice(0, start) + edit.newText + result.slice(end)
+  }, text)
 }
 
 // ---------------------------------------------------------------------------
@@ -533,19 +545,78 @@ describe('processMarkdownContent 组合规则', () => {
 })
 
 describe('getMarkdownAutoSpaceEdits', () => {
+  it.each(ALL_CASES)('应用最小编辑与规则输出一致：%s', (_description, text, expected) => {
+    const document = createMockDocument(text)
+    const edits = getMarkdownAutoSpaceEdits(document, text)
+    expect(applyEdits(text, document, edits)).toBe(expected)
+    for (let index = 0; index < (edits?.length ?? 0); index++) {
+      const edit = edits![index]!
+      expect(edit.range.start.line).toBe(edit.range.end.line)
+      expect(document.getText(edit.range)).not.toBe(edit.newText)
+      if (index > 0)
+        expect(document.offsetAt(edits![index - 1]!.range.end)).toBeLessThanOrEqual(document.offsetAt(edit.range.start))
+    }
+  })
+
   it('文本无变化时不返回 edit', () => {
     const document = createMockDocument('已经有 空格')
     expect(getMarkdownAutoSpaceEdits(document, '已经有 空格')).toBeUndefined()
   })
 
-  it('保存格式化返回可直接交给 waitUntil 的完整文档 TextEdit', () => {
+  it('保存格式化只返回实际变化位置的 TextEdit', () => {
     const text = '中文English'
     const document = createMockDocument(text)
     const edits = getMarkdownAutoSpaceEdits(document, text)
     expect(edits).toHaveLength(1)
-    expect(edits?.[0]?.newText).toBe('中文 English')
-    expect(edits?.[0]?.range.start).toEqual({ line: 0, character: 0 })
-    expect(edits?.[0]?.range.end).toEqual({ line: 0, character: text.length })
+    expect(edits?.[0]?.newText).toBe(' ')
+    expect(edits?.[0]?.range.start).toEqual({ line: 0, character: 2 })
+    expect(edits?.[0]?.range.end).toEqual({ line: 0, character: 2 })
+  })
+
+  it('多行多处变化时编辑互不重叠且不覆盖换行', () => {
+    const text = '中文English\n已经有 空格\n测试Python和Java'
+    const document = createMockDocument(text)
+    const edits = getMarkdownAutoSpaceEdits(document, text)
+    expect(edits?.map(edit => edit.newText)).toEqual([' ', ' ', ' ', ' '])
+    expect(edits?.map(edit => edit.range.start)).toEqual([
+      { line: 0, character: 2 },
+      { line: 2, character: 2 },
+      { line: 2, character: 8 },
+      { line: 2, character: 9 },
+    ])
+    expect(edits?.every(edit => edit.range.start.line === edit.range.end.line)).toBe(true)
+  })
+
+  it('CRLF 文档不把换行符包含在编辑范围内', () => {
+    const text = '中文English\r\n第二行Python'
+    const document = createMockDocument(text)
+    const edits = getMarkdownAutoSpaceEdits(document, text)
+    expect(edits).toHaveLength(2)
+    expect(edits?.every(edit => edit.range.start.line === edit.range.end.line)).toBe(true)
+  })
+
+  it.each([
+    ['生成器： \t\r\n中文English', '生成器：\r\n中文 English'],
+    ['好，\tHello\n中文English', '好，Hello\n中文 English'],
+    ['好，\u3000Hello\n中文English', '好，Hello\n中文 English'],
+    ['生成器：\r\n中文English\n结束： \t\r\n', '生成器：\r\n中文 English\n结束：\r\n'],
+  ])('删除空白时保留原始换行：%j', (text, expected) => {
+    const document = createMockDocument(text)
+    const edits = getMarkdownAutoSpaceEdits(document, text)
+    expect(edits?.every(edit => edit.range.start.line === edit.range.end.line)).toBe(true)
+    expect(applyEdits(text, document, edits)).toBe(expected)
+    expect(processMarkdownContent(text)).toBe(expected)
+    expect(edits?.every(edit => !/[\r\n]/.test(document.getText(edit.range) + edit.newText))).toBe(true)
+  })
+
+  it('删除制表符时不替换后续未变化字符', () => {
+    const text = '好，\tHello\n中文English'
+    const document = createMockDocument(text)
+    const edits = getMarkdownAutoSpaceEdits(document, text)
+    expect(edits).toHaveLength(2)
+    expect(edits?.[0]?.newText).toBe('')
+    expect(document.getText(edits![0]!.range)).toBe('\t')
+    expect(edits?.[1]?.range.start).toEqual({ line: 1, character: 2 })
   })
 
   it('非 Markdown 文档不返回 edit', () => {
@@ -567,13 +638,23 @@ describe('getMarkdownAutoSpaceDiagnostics', () => {
 })
 
 describe('getMarkdownAutoSpaceEditsForRange', () => {
+  it('非零起点跨行选区保留混合换行和选区外文本', () => {
+    const text = '前文\r\n前缀中文English\r\n生成器： \t\n末行Python后缀'
+    const document = createMockDocument(text)
+    const range = new Range(createPosition(1, 2), createPosition(3, 8))
+    const edits = getMarkdownAutoSpaceEditsForRange(document, range)
+    expect(applyEdits(text, document, edits)).toBe('前文\r\n前缀中文 English\r\n生成器：\n末行 Python后缀')
+    expect(edits?.every(edit => edit.range.start.line === edit.range.end.line)).toBe(true)
+  })
+
   it('选区跨围栏代码块时跳过代码块内容，仅处理正文', () => {
     const text = '```ts\n中文English\n```\n正文English'
     const document = createMockDocument(text)
     const range = new Range(createPosition(0, 0), createPosition(3, 9))
     const edits = getMarkdownAutoSpaceEditsForRange(document, range)
     expect(edits).toHaveLength(1)
-    expect(edits?.[0]?.newText).toBe('```ts\n中文English\n```\n正文 English')
+    expect(edits?.[0]?.newText).toBe(' ')
+    expect(edits?.[0]?.range.start).toEqual({ line: 3, character: 2 })
   })
 
   it('选区位于 YAML front matter 中时不返回 edit', () => {
