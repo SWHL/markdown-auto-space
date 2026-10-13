@@ -21,7 +21,7 @@
   ],
   "main": "./dist/index.js",
   "browser": "./dist/web/extension.js",
-  "icon": "res/icon.jpg",
+  "icon": "res/icon.png",
   "engines": {
     "vscode": "^1.69.0"
   },

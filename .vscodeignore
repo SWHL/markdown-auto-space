@@ -29,6 +29,7 @@ coverage
 
 # Marketplace source assets
 res/*.svg
+res/icon.jpg
 res/marketplace-hero*
 res/marketplace-save*
 res/marketplace-diagnostics*
