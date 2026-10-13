@@ -4,7 +4,7 @@ import { shouldRunFormatOnSave } from './type'
 
 let outputChannel: vscode.OutputChannel
 let diagnosticCollection: vscode.DiagnosticCollection
-let diagnosticsDebounceTimer: ReturnType<typeof setTimeout> | undefined
+const diagnosticsDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
 /**
  *
@@ -28,37 +28,66 @@ function updateDiagnostics(doc: vscode.TextDocument) {
 }
 
 /**
- * 对文档执行加空格并应用编辑（保存时或格式化时调用）
+ * 计算文档格式化编辑。保存参与者会负责应用返回的编辑，命令路径则继续
+ * 使用 workspace.applyEdit 主动应用编辑。
  * @param document
  */
-async function formatDocument(document: vscode.TextDocument) {
+function getFormatEdits(document: vscode.TextDocument): vscode.TextEdit[] {
   try {
-    log(`formatDocument: ${document.uri.fsPath} languageId=${document.languageId}`)
+    log(`getFormatEdits: ${document.uri.fsPath} languageId=${document.languageId}`)
     if (!shouldProcessFile(document)) {
       log(`  跳过: 非 Markdown 文件`)
-      return
+      return []
     }
 
     const text = document.getText()
-    const edits = getMarkdownAutoSpaceEdits(document, text)
-    if (!edits?.length) {
+    const edits = getMarkdownAutoSpaceEdits(document, text) ?? []
+    if (!edits.length) {
       log(`  无编辑或无需修改`)
-      updateDiagnostics(document)
-      return
+      return []
     }
 
-    log(`  应用 ${edits.length} 处编辑`)
-    const workspaceEdit = new vscode.WorkspaceEdit()
-    workspaceEdit.set(document.uri, edits)
-    const applied = await vscode.workspace.applyEdit(workspaceEdit)
-    log(`  applyEdit 结果: ${applied}`)
-    updateDiagnostics(document)
+    log(`  返回 ${edits.length} 处编辑供保存流程应用`)
+    return edits
   }
   catch (err) {
     log(`  错误: ${err instanceof Error ? err.message : String(err)}`)
     if (err instanceof Error && err.stack)
       log(err.stack)
+    return []
   }
+}
+
+function getDiagnosticsTimerKey(doc: vscode.TextDocument) {
+  return doc.uri.toString()
+}
+
+function scheduleDiagnosticsUpdate(doc: vscode.TextDocument) {
+  const key = getDiagnosticsTimerKey(doc)
+  const existingTimer = diagnosticsDebounceTimers.get(key)
+  if (existingTimer)
+    clearDiagnosticsTimer(key, existingTimer)
+  diagnosticsDebounceTimers.set(key, setTimeout(() => {
+    diagnosticsDebounceTimers.delete(key)
+    updateDiagnostics(doc)
+  }, 300))
+}
+
+function clearDiagnosticsTimer(key: string, timer = diagnosticsDebounceTimers.get(key)) {
+  if (!timer)
+    return
+  clearTimeout(timer)
+  if (diagnosticsDebounceTimers.get(key) === timer)
+    diagnosticsDebounceTimers.delete(key)
+}
+
+function cancelDiagnosticsUpdate(doc: vscode.TextDocument) {
+  clearDiagnosticsTimer(getDiagnosticsTimerKey(doc))
+}
+
+function flushDiagnosticsUpdate(doc: vscode.TextDocument) {
+  cancelDiagnosticsUpdate(doc)
+  updateDiagnostics(doc)
 }
 
 /**
@@ -145,7 +174,7 @@ export function activate(context: vscode.ExtensionContext) {
       const runFormat = shouldRunFormatOnSave(event.reason)
       log(`onWillSave: ${event.document.uri.fsPath} formatOnSave=${formatOnSave} reason=${event.reason} runFormat=${runFormat}`)
       if (formatOnSave && runFormat)
-        event.waitUntil(formatDocument(event.document))
+        event.waitUntil(Promise.resolve(getFormatEdits(event.document)))
     }),
   )
   // 监听格式化文档命令
@@ -172,18 +201,14 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.workspace.onDidChangeTextDocument((e) => {
       if (e.document.languageId !== 'markdown')
         return
-      if (diagnosticsDebounceTimer)
-        clearTimeout(diagnosticsDebounceTimer)
-      diagnosticsDebounceTimer = setTimeout(() => {
-        diagnosticsDebounceTimer = undefined
-        updateDiagnostics(e.document)
-      }, 300)
+      scheduleDiagnosticsUpdate(e.document)
     }),
     // Final refresh after save clears diagnostics left behind by save-time edits.
     vscode.workspace.onDidSaveTextDocument((doc) => {
-      updateDiagnostics(doc)
+      flushDiagnosticsUpdate(doc)
     }),
     vscode.workspace.onDidCloseTextDocument((doc) => {
+      cancelDiagnosticsUpdate(doc)
       diagnosticCollection.delete(doc.uri)
     }),
   )
@@ -196,8 +221,9 @@ export function activate(context: vscode.ExtensionContext) {
  *
  */
 export function deactivate() {
-  if (diagnosticsDebounceTimer)
-    clearTimeout(diagnosticsDebounceTimer)
+  for (const timer of diagnosticsDebounceTimers.values())
+    clearTimeout(timer)
+  diagnosticsDebounceTimers.clear()
 }
 
 /**

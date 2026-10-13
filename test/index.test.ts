@@ -538,11 +538,14 @@ describe('getMarkdownAutoSpaceEdits', () => {
     expect(getMarkdownAutoSpaceEdits(document, '已经有 空格')).toBeUndefined()
   })
 
-  it('文本有变化时返回整篇替换 edit', () => {
-    const document = createMockDocument('中文English')
-    const edits = getMarkdownAutoSpaceEdits(document, '中文English')
+  it('保存格式化返回可直接交给 waitUntil 的完整文档 TextEdit', () => {
+    const text = '中文English'
+    const document = createMockDocument(text)
+    const edits = getMarkdownAutoSpaceEdits(document, text)
     expect(edits).toHaveLength(1)
     expect(edits?.[0]?.newText).toBe('中文 English')
+    expect(edits?.[0]?.range.start).toEqual({ line: 0, character: 0 })
+    expect(edits?.[0]?.range.end).toEqual({ line: 0, character: text.length })
   })
 
   it('非 Markdown 文档不返回 edit', () => {
