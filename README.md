@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/SWHL/markdown-auto-space/refs/heads/main/res/icon.svg" width="160px" alt="Markdown Auto Space icon"/>
+  <img src="https://raw.githubusercontent.com/SWHL/markdown-auto-space/refs/heads/main/res/logo-lockup.svg" width="400px" alt="Markdown Auto Space icon"/>
 </p>
 
 # Markdown Auto Space
