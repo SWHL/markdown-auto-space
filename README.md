@@ -31,6 +31,7 @@ Format Chinese-English spacing in Markdown for VS Code.
 - 支持 **Format Document / 选区格式化**
 - 支持 **诊断提示（squiggles）**，像 markdownlint 一样直接标出问题位置
 - 支持 **9 条可单独开关的规则（MAS001–MAS009）**
+- 使用最小范围编辑，只提交实际发生变化的文本区间
 - 支持 **VS Code Desktop** 和 **VS Code for the Web**（`vscode.dev`、`github.dev`）
 
 ## Rules covered
@@ -86,6 +87,8 @@ code --install-extension SWHL.markdown-auto-space
 
 默认开启 `markdownAutoSpace.formatOnSave`，你手动保存 Markdown 文件时会自动修正空格问题。
 
+保存格式化通过 VS Code 的保存事务返回编辑，由编辑器统一应用。扩展不会在保存事件中再次调用 `applyEdit`，因此能更好地与其他 Markdown 格式化插件共存；自动保存和失焦保存不会触发此功能。
+
 ### 2. Format document or selection
 
 - 命令面板运行 `Markdown Auto Space: Format Markdown Spacing`
@@ -130,6 +133,8 @@ code --install-extension SWHL.markdown-auto-space
 
 - 仅在语言 ID 为 `markdown` 的文件中生效
 - 自动保存、失焦保存不会触发 `formatOnSave`
+- 保存时只返回实际变化位置的编辑，不会全文替换文档；未变化文本、光标 / 选区和换行格式会尽量保持稳定
+- 支持 LF, CRLF 以及同一文档中的混合换行格式，不会为了格式化空格改写换行符
 - 未选中内容时，“格式化选中”会处理当前光标所在行
 - 无需修改时不会产生空编辑，避免文档脏状态抖动
 - 文档开头的 YAML front matter 不参与格式化和诊断；正文中的水平分隔线不会影响后续内容处理
@@ -145,6 +150,7 @@ code --install-extension SWHL.markdown-auto-space
 
 | 版本 | 摘要 |
 |------|------|
+| **未发布** | 重构保存格式化流程；保存时通过 `waitUntil` 返回编辑并由 VS Code 保存事务应用；全文、选区和命令格式化改用最小范围编辑；保留 LF / CRLF 换行并补充多行、多处变化、无变化及混合换行测试 |
 | **0.0.8** | 重写 Marketplace 文案与关键词；新增更接近真实 VS Code 的横向宣传图；优化商店展示与 VSIX 体积 |
 | **0.0.7** | 优化格式化稳定性与选区处理；新增自动发版工作流；精简 CI 与发布链路 |
 | **0.0.6** | 新增 MAS007–MAS009：数字与单位、度 / 百分号、全形标点旁空格规则 |
@@ -160,6 +166,8 @@ pnpm typecheck
 pnpm test
 pnpm package:vsix
 ```
+
+针对保存格式化流程，可以在 Extension Development Host 中验证：打开 Markdown 文件，输入 `中文English`、多行混排文本以及带 CRLF 的内容后手动保存。预期只修改实际需要加空格或删空格的位置，代码块内容和换行符保持不变；启用其他 Markdown 格式化插件时，也不会由本扩展全文覆盖文档。
 
 围栏代码块相关测试可单独运行：
 
