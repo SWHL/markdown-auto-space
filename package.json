@@ -27,28 +27,20 @@
   },
   "activationEvents": [
     "onLanguage:markdown",
-    "onCommand:extension.markdownAutoSpace",
-    "onCommand:extension.markdownAutoSpaceFormatSelection"
+    "onCommand:extension.markdownAutoSpace"
   ],
   "contributes": {
     "commands": [
       {
         "command": "extension.markdownAutoSpace",
-        "title": "Markdown Auto Space: Format Markdown Spacing"
-      },
-      {
-        "command": "extension.markdownAutoSpaceFormatSelection",
-        "title": "Markdown Auto Space: Format Selection"
+        "title": "Markdown Auto Space: Format Document",
+        "icon": "$(symbol-misc)"
       }
     ],
     "menus": {
       "commandPalette": [
         {
           "command": "extension.markdownAutoSpace",
-          "when": "editorLangId == markdown"
-        },
-        {
-          "command": "extension.markdownAutoSpaceFormatSelection",
           "when": "editorLangId == markdown"
         }
       ],
@@ -57,21 +49,11 @@
           "command": "extension.markdownAutoSpace",
           "when": "editorLangId == markdown",
           "group": "1_modification"
-        },
-        {
-          "command": "extension.markdownAutoSpaceFormatSelection",
-          "when": "editorLangId == markdown",
-          "group": "1_modification"
         }
       ],
       "editor/context": [
         {
           "command": "extension.markdownAutoSpace",
-          "when": "editorLangId == markdown",
-          "group": "1_modification"
-        },
-        {
-          "command": "extension.markdownAutoSpaceFormatSelection",
           "when": "editorLangId == markdown",
           "group": "1_modification"
         }
@@ -83,7 +65,7 @@
         "markdownAutoSpace.diagnostics.enable": {
           "type": "boolean",
           "default": true,
-          "description": "Show diagnostics (squiggles) where space rules are violated (e.g. MAS001: 中英文之间应有空格)"
+          "description": "Show diagnostics where spacing rules are violated (for example, MAS001)."
         },
         "markdownAutoSpace.formatOnSave": {
           "type": "boolean",
@@ -93,7 +75,7 @@
         "markdownAutoSpace.formatOnDocument": {
           "type": "boolean",
           "default": false,
-          "description": "Execute add space on Format Document command"
+          "description": "Apply spacing rules when the Format Document command runs."
         },
         "markdownAutoSpace.rules": {
           "type": "object",
@@ -102,47 +84,47 @@
             "MAS001": {
               "type": "boolean",
               "default": true,
-              "description": "中英文/数字之间应有空格"
+              "description": "Add spaces between Chinese and English or numbers."
             },
             "MAS002": {
               "type": "boolean",
               "default": true,
-              "description": "中文与行内代码（反引号）之间应有空格"
+              "description": "Add spaces between Chinese text and inline code."
             },
             "MAS003": {
               "type": "boolean",
               "default": true,
-              "description": "中文与链接/URL 之间应有空格"
+              "description": "Add spaces between Chinese text and links or URLs."
             },
             "MAS004": {
               "type": "boolean",
               "default": true,
-              "description": "英文/数字间的顿号应改为逗号+空格"
+              "description": "Replace enumeration commas between English or numbers with comma-space."
             },
             "MAS005": {
               "type": "boolean",
               "default": true,
-              "description": "斜杠与中文之间应有空格"
+              "description": "Add spaces around slashes next to Chinese text."
             },
             "MAS006": {
               "type": "boolean",
               "default": true,
-              "description": "超链接 [] 内中英文混排时英文左右应有空格"
+              "description": "Add spaces around English text mixed with Chinese inside link text."
             },
             "MAS007": {
               "type": "boolean",
               "default": true,
-              "description": "数字与单位之间应有空格"
+              "description": "Add spaces between numbers and units."
             },
             "MAS008": {
               "type": "boolean",
               "default": true,
-              "description": "度数、百分号与数字之间不应有空格"
+              "description": "Remove spaces between numbers and degree or percent signs."
             },
             "MAS009": {
               "type": "boolean",
               "default": true,
-              "description": "全形句读标点旁不应有空格"
+              "description": "Remove spaces around full-width punctuation."
             }
           }
         }

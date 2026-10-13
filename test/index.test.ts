@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from 'vitest'
-import { Range } from 'vscode'
 import {
   applyDigitUnitSpace,
   applyNoSpaceAroundCjkPunct,
@@ -12,7 +11,7 @@ import {
 } from '../src/markdownSpace'
 import { DEFAULT_MARKDOWN_SPACE_RULES, MANUAL_SAVE_REASON, RULES_DOC_BASE_URL, getRuleDocUrl, normalizeRules, shouldRunFormatOnSave } from '../src/type'
 import type { MarkdownSpaceRulesType } from '../src/type'
-import { getMarkdownAutoSpaceConfig, getMarkdownAutoSpaceDiagnostics, getMarkdownAutoSpaceEdits, getMarkdownAutoSpaceEditsForRange } from '../src/utils'
+import { getMarkdownAutoSpaceConfig, getMarkdownAutoSpaceDiagnostics, getMarkdownAutoSpaceEdits } from '../src/utils'
 
 vi.mock('vscode', () => {
   class Range {
@@ -40,7 +39,7 @@ vi.mock('vscode', () => {
   }
 
   return {
-    Diagnostic: class {},
+    Diagnostic: class { },
     DiagnosticSeverity: { Information: 1 },
     Range,
     TextEdit,
@@ -66,11 +65,6 @@ vi.mock('vscode', () => {
 
 /** 单条用例: [用例描述, 输入, 期望输出]（描述放首位便于 it.each 显示测试名） */
 type CaseRow = [description: string, input: string, expected: string]
-
-/** 创建兼容 Range 构造的测试位置对象。 */
-function createPosition(line: number, character: number) {
-  return { line, character } as never
-}
 
 /** 构造最小化的 TextDocument mock，供 utils 层单测使用。 */
 function createMockDocument(text: string, languageId = 'markdown') {
@@ -634,34 +628,6 @@ describe('getMarkdownAutoSpaceDiagnostics', () => {
     const formatted = processMarkdownContent(original, DEFAULT_MARKDOWN_SPACE_RULES)
     expect(formatted).toBe('生成器：')
     expect(getMarkdownAutoSpaceDiagnostics(document, formatted)).toHaveLength(0)
-  })
-})
-
-describe('getMarkdownAutoSpaceEditsForRange', () => {
-  it('非零起点跨行选区保留混合换行和选区外文本', () => {
-    const text = '前文\r\n前缀中文English\r\n生成器： \t\n末行Python后缀'
-    const document = createMockDocument(text)
-    const range = new Range(createPosition(1, 2), createPosition(3, 8))
-    const edits = getMarkdownAutoSpaceEditsForRange(document, range)
-    expect(applyEdits(text, document, edits)).toBe('前文\r\n前缀中文 English\r\n生成器：\n末行 Python后缀')
-    expect(edits?.every(edit => edit.range.start.line === edit.range.end.line)).toBe(true)
-  })
-
-  it('选区跨围栏代码块时跳过代码块内容，仅处理正文', () => {
-    const text = '```ts\n中文English\n```\n正文English'
-    const document = createMockDocument(text)
-    const range = new Range(createPosition(0, 0), createPosition(3, 9))
-    const edits = getMarkdownAutoSpaceEditsForRange(document, range)
-    expect(edits).toHaveLength(1)
-    expect(edits?.[0]?.newText).toBe(' ')
-    expect(edits?.[0]?.range.start).toEqual({ line: 3, character: 2 })
-  })
-
-  it('选区位于 YAML front matter 中时不返回 edit', () => {
-    const text = '---\ntitle: 中文English\n---\n正文'
-    const document = createMockDocument(text)
-    const range = new Range(createPosition(0, 0), createPosition(2, 3))
-    expect(getMarkdownAutoSpaceEditsForRange(document, range)).toBeUndefined()
   })
 })
 

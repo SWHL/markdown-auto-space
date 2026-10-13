@@ -1,7 +1,7 @@
 // import type { TextEditorEdit } from 'vscode'
 import type { TextDocument } from 'vscode'
 import { Diagnostic, DiagnosticSeverity, Range, TextEdit, Uri, window as Window, workspace as Workspace } from 'vscode'
-import { addSpacesBetweenChineseAndAlnum, getMarkdownSpaceViolations, getSkippedLineIndices, processMarkdownContent } from './markdownSpace'
+import { getMarkdownSpaceViolations, processMarkdownContent } from './markdownSpace'
 import type { AutoSpaceConfigType } from './type'
 import { getRuleDocUrl, normalizeRules } from './type'
 
@@ -114,21 +114,6 @@ function getMinimalTextEdits(
   ))
 }
 
-function getDocumentOffset(document: TextDocument, position: { line: number, character: number }): number {
-  type DocumentWithOptionalOffsetAt = TextDocument & {
-    offsetAt?: (value: { line: number, character: number }) => number
-  }
-  const offsetAt = (document as DocumentWithOptionalOffsetAt).offsetAt
-  if (offsetAt)
-    return offsetAt.call(document, position)
-
-  const lines = document.getText().split('\n')
-  let offset = 0
-  for (let line = 0; line < position.line; line++)
-    offset += (lines[line]?.length ?? 0) + 1
-  return offset + position.character
-}
-
 /**
  *
  */
@@ -170,39 +155,12 @@ export function getMarkdownAutoSpaceEdits(
   return getMinimalTextEdits(document, text, updatedText)
 }
 
-/**
- * 仅对选中范围（或单行）做加空格，用于「格式化选中」命令。按行处理，不依赖全文代码块上下文。
- * @param document
- * @param range
- */
-export function getMarkdownAutoSpaceEditsForRange(
-  document: TextDocument,
-  range: Range,
-): TextEdit[] | undefined {
+/** Return the number of elementary text changes produced by document formatting. */
+export function getMarkdownAutoSpaceChangeCount(document: TextDocument, text: string): number {
   if (!shouldProcessFile(document))
-    return undefined
-  const text = document.getText(range)
-  if (!text.length)
-    return undefined
+    return 0
   const { rules } = getMarkdownAutoSpaceConfig()
-  const skippedLineIndices = getSkippedLineIndices(document.getText())
-  const edits: TextEdit[] = []
-
-  for (let lineIndex = range.start.line; lineIndex <= range.end.line; lineIndex++) {
-    const line = document.lineAt(lineIndex)
-    const lineStart = lineIndex === range.start.line ? range.start.character : 0
-    const lineEnd = lineIndex === range.end.line ? range.end.character : line.text.length
-    const selectedText = line.text.slice(lineStart, lineEnd)
-
-    if (skippedLineIndices.has(lineIndex))
-      continue
-
-    const formattedText = addSpacesBetweenChineseAndAlnum(selectedText, rules)
-    const baseOffset = getDocumentOffset(document, { line: lineIndex, character: lineStart })
-    edits.push(...(getMinimalTextEdits(document, selectedText, formattedText, baseOffset) ?? []))
-  }
-
-  return edits.length ? edits : undefined
+  return getMinimalTextChanges(text, processMarkdownContent(text, rules)).length
 }
 
 /**

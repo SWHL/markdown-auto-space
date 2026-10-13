@@ -10,7 +10,7 @@
 
 Format Chinese-English spacing in Markdown for VS Code.
 
-> 保存时自动修正 Markdown 中的中英混排空格，支持格式化整篇 / 选区，并用波浪线提示不符合规则的位置。
+> 保存时自动修正 Markdown 中的中英混排空格，支持格式化全文，并用波浪线提示不符合规则的位置。
 
 [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=SWHL.markdown-auto-space)
 
@@ -32,7 +32,7 @@ Format Chinese-English spacing in Markdown for VS Code.
 
 - 只处理 **Markdown** 文件，不会误改代码文件
 - 支持 **手动保存时自动修正**
-- 支持 **Format Document / 选区格式化**
+- 支持 **Format Document**，也可在手动保存时自动格式化全文
 - 支持 **诊断提示（squiggles）**，像 markdownlint 一样直接标出问题位置
 - 支持 **9 条可单独开关的规则（MAS001–MAS009）**
 - 使用最小范围编辑，只提交实际发生变化的文本区间
@@ -93,11 +93,11 @@ code --install-extension SWHL.markdown-auto-space
 
 保存格式化通过 VS Code 的保存事务返回编辑，由编辑器统一应用。扩展不会在保存事件中再次调用 `applyEdit`，因此能更好地与其他 Markdown 格式化插件共存；自动保存和失焦保存不会触发此功能。
 
-### 2. Format document or selection
+### 2. Format document
 
-- 命令面板运行 `Markdown Auto Space: Format Markdown Spacing`
-- 命令面板运行 `Markdown Auto Space: Format Selection`
-- 也可以从编辑器标题栏或右键菜单触发
+- 命令面板运行 `Markdown Auto Space: Format Document`
+- 也可以从编辑器标题栏或右键菜单运行；右键菜单中的命令位于修改 / 格式化区域，靠近 VS Code 内置的 `Format Document`
+- 格式化完成后，状态栏显示实际修改数量；没有变化时仅显示短暂状态提示，不弹出通知
 
 ### 3. See diagnostics before fixing
 
@@ -141,8 +141,7 @@ code --install-extension SWHL.markdown-auto-space
 - 自动保存、失焦保存不会触发 `formatOnSave`
 - 保存时只返回实际变化位置的编辑，不会全文替换文档；未变化文本、光标 / 选区和换行格式会尽量保持稳定
 - 支持 LF, CRLF 以及同一文档中的混合换行格式，不会为了格式化空格改写换行符
-- 未选中内容时，“格式化选中”会处理当前光标所在行
-- 无需修改时不会产生空编辑，避免文档脏状态抖动
+- 无需修改时不会产生空编辑，避免文档脏状态抖动；命令反馈使用状态栏短提示和输出日志
 - 文档开头的 YAML front matter 不参与格式化和诊断；正文中的水平分隔线不会影响后续内容处理
 - 未闭合的 YAML front matter 采用保守策略，后续内容不会被修改或诊断
 - 围栏代码块支持反引号和波浪线，起始围栏为 3 个或更多字符；只有相同字符且长度不短于起始围栏的结束标记才会闭合代码块
