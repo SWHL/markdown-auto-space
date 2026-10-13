@@ -1,8 +1,8 @@
 <div align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/SWHL/markdown-auto-space/refs/heads/main/res/logo-lockup.png"  width="60%" height="60%">
-    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/SWHL/markdown-auto-space/refs/heads/main/res/logo-lockup-white.png"  width="60%" height="60%">
-    <img alt="Shows an illustrated sun in light mode and a moon with stars in dark mode." src="https://raw.githubusercontent.com/SWHL/markdown-auto-space/refs/heads/main/res/logo-lockup-white.png">
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/SWHL/markdown-auto-space/refs/heads/main/res/logo-lockup-white.png"  width="60%" height="60%">
+    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/SWHL/markdown-auto-space/refs/heads/main/res/logo-lockup.png"  width="60%" height="60%">
+    <img alt="Shows an illustrated sun in light mode and a moon with stars in dark mode." src="https://raw.githubusercontent.com/SWHL/markdown-auto-space/refs/heads/main/res/logo-lockup.png">
   </picture>
 </div>
 
