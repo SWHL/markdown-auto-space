@@ -61,6 +61,30 @@ function getFormatEdits(document: vscode.TextDocument): vscode.TextEdit[] {
   }
 }
 
+function getFormatEditsInRange(document: vscode.TextDocument, range: vscode.Range): vscode.TextEdit[] {
+  return getFormatEdits(document).filter((edit) => {
+    const startsAfterRange = edit.range.start.line > range.start.line
+      || (edit.range.start.line === range.start.line && edit.range.start.character >= range.start.character)
+    const endsBeforeRange = edit.range.end.line < range.end.line
+      || (edit.range.end.line === range.end.line && edit.range.end.character <= range.end.character)
+    return startsAfterRange && endsBeforeRange
+  })
+}
+
+function rangesOverlap(left: vscode.Range, right: vscode.Range): boolean {
+  const startsBeforeEnd = left.start.line < right.end.line
+    || (left.start.line === right.end.line && left.start.character <= right.end.character)
+  const endsAfterStart = left.end.line > right.start.line
+    || (left.end.line === right.start.line && left.end.character >= right.start.character)
+  return startsBeforeEnd && endsAfterStart
+}
+
+function codeActionKindRequested(only: vscode.CodeActionKind | undefined, kind: vscode.CodeActionKind): boolean {
+  if (!only)
+    return true
+  return only.contains ? only.contains(kind) : only === kind
+}
+
 function refreshDiagnosticsForConfigurationChange(event: vscode.ConfigurationChangeEvent) {
   const diagnosticsChanged = event.affectsConfiguration('markdownAutoSpace.diagnostics.enable')
   const rulesChanged = event.affectsConfiguration('markdownAutoSpace.rules')
@@ -158,6 +182,55 @@ export function activate(context: vscode.ExtensionContext) {
     },
   })
   context.subscriptions.push(formattingProvider)
+
+  const rangeFormattingProvider = vscode.languages.registerDocumentRangeFormattingEditProvider('markdown', {
+    provideDocumentRangeFormattingEdits: (document, range) => {
+      const { formatOnDocument } = getMarkdownAutoSpaceConfig(document)
+      if (!formatOnDocument)
+        return []
+      return getFormatEditsInRange(document, range)
+    },
+  })
+  context.subscriptions.push(rangeFormattingProvider)
+
+  const codeActionProvider = vscode.languages.registerCodeActionsProvider('markdown', {
+    provideCodeActions: (document, _range, context) => {
+      if (!shouldProcessFile(document))
+        return []
+
+      const edits = getFormatEdits(document)
+      if (!edits.length)
+        return []
+
+      const actions: vscode.CodeAction[] = codeActionKindRequested(context.only, vscode.CodeActionKind.QuickFix)
+        ? context.diagnostics
+          .filter(diagnostic => diagnostic.source === 'markdown-auto-space')
+          .map((diagnostic) => {
+            const code = typeof diagnostic.code === 'object' && diagnostic.code
+              ? diagnostic.code.value
+              : diagnostic.code
+            const action = new vscode.CodeAction(`Fix ${String(code ?? 'Markdown Auto Space')}`, vscode.CodeActionKind.QuickFix)
+            action.diagnostics = [diagnostic]
+            const edit = new vscode.WorkspaceEdit()
+            edit.set(document.uri, edits.filter(edit => rangesOverlap(edit.range, diagnostic.range)))
+            action.edit = edit
+            return action
+          })
+        : []
+
+      if (codeActionKindRequested(context.only, vscode.CodeActionKind.SourceFixAll)) {
+        const fixAll = new vscode.CodeAction('Fix all Markdown Auto Space issues', vscode.CodeActionKind.SourceFixAll)
+        const edit = new vscode.WorkspaceEdit()
+        edit.set(document.uri, edits)
+        fixAll.edit = edit
+        actions.push(fixAll)
+      }
+      return actions
+    },
+  }, {
+    providedCodeActionKinds: [vscode.CodeActionKind.QuickFix, vscode.CodeActionKind.SourceFixAll],
+  })
+  context.subscriptions.push(codeActionProvider)
 
   const registerCompletion = vscode.languages.registerCompletionItemProvider
   if (typeof registerCompletion === 'function') {

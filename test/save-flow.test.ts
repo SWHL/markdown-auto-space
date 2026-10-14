@@ -22,6 +22,9 @@ const mock = vi.hoisted(() => {
     diagnosticDelete: vi.fn(),
     diagnosticClear: vi.fn(),
     formattingProvider: undefined as any,
+    rangeFormattingProvider: undefined as any,
+    codeActionProvider: undefined as any,
+    commandId: undefined as string | undefined,
     completionProvider: undefined as any,
     hoverProvider: undefined as any,
   }
@@ -57,6 +60,21 @@ vi.mock('vscode', () => {
   class Hover {
     constructor(public contents: any) { }
   }
+  class WorkspaceEdit {
+    changes = new Map<string, any[]>()
+    set(uri: any, edits: any[]) {
+      this.changes.set(typeof uri === 'string' ? uri : uri.toString(), edits)
+    }
+  }
+  class CodeAction {
+    diagnostics?: any[]
+    edit?: any
+    constructor(public title: string, public kind: any) { }
+  }
+  const codeActionKind = {
+    QuickFix: 'quickfix',
+    SourceFixAll: 'source.fixAll',
+  }
   const register = (name: keyof typeof mock.events) => (listener: any) => {
     mock.events[name].push(listener)
     return { dispose: vi.fn() }
@@ -67,6 +85,9 @@ vi.mock('vscode', () => {
     CompletionItem,
     MarkdownString,
     Hover,
+    WorkspaceEdit,
+    CodeAction,
+    CodeActionKind: codeActionKind,
     CompletionItemKind: { Keyword: 1, Enum: 2 },
     DiagnosticSeverity: { Information: 1 },
     Range,
@@ -78,11 +99,24 @@ vi.mock('vscode', () => {
       showWarningMessage: vi.fn(),
       showInformationMessage: vi.fn(),
     },
-    commands: { registerCommand: () => ({ dispose: vi.fn() }) },
+    commands: {
+      registerCommand: (id: string) => {
+        mock.state.commandId = id
+        return { dispose: vi.fn() }
+      },
+    },
     languages: {
       match: () => mock.state.exclude.length ? 1 : 0,
       registerDocumentFormattingEditProvider: (_language: string, provider: any) => {
         mock.state.formattingProvider = provider
+        return { dispose: vi.fn() }
+      },
+      registerDocumentRangeFormattingEditProvider: (_language: string, provider: any) => {
+        mock.state.rangeFormattingProvider = provider
+        return { dispose: vi.fn() }
+      },
+      registerCodeActionsProvider: (_language: string, provider: any) => {
+        mock.state.codeActionProvider = provider
         return { dispose: vi.fn() }
       },
       registerCompletionItemProvider: (_language: string, provider: any) => {
@@ -128,21 +162,26 @@ vi.mock('vscode', () => {
 })
 
 function createDocument(uri = 'file:///test.md', text = '中文English') {
+  const lines = text.split('\n')
+  const lineOffsets = lines.map((_, index) => lines.slice(0, index).reduce((offset, line) => offset + line.length + 1, 0))
   return {
     languageId: 'markdown',
     uri: { fsPath: uri, toString: () => uri },
-    lineCount: 1,
+    lineCount: lines.length,
     getText: () => text,
-    positionAt: (offset: number) => ({ line: 0, character: offset }),
-    lineAt: () => ({
-      text,
+    positionAt: (offset: number) => {
+      const line = Math.max(0, lineOffsets.findLastIndex(start => start <= offset))
+      return { line, character: offset - lineOffsets[line]! }
+    },
+    lineAt: (line = 0) => ({
+      text: lines[line]!,
       range: {
         start: {
-          line: 0,
+          line,
           character: 0,
-          translate: (line: number, character: number) => ({ line, character }),
+          translate: (lineDelta: number, character: number) => ({ line: line + lineDelta, character }),
         },
-        end: { line: 0, character: text.length },
+        end: { line, character: lines[line]!.length },
       },
     }),
   }
@@ -168,7 +207,17 @@ describe('save event flow', () => {
     mock.state.diagnosticClear.mockClear()
     mock.state.completionProvider = undefined
     mock.state.hoverProvider = undefined
+    mock.state.rangeFormattingProvider = undefined
+    mock.state.codeActionProvider = undefined
+    mock.state.commandId = undefined
     activate({ subscriptions: [] } as any)
+  })
+
+  it('激活时注册 Markdown 格式化命令和 VS Code providers', () => {
+    expect(mock.state.commandId).toBe('extension.markdownAutoSpace')
+    expect(mock.state.formattingProvider).toBeDefined()
+    expect(mock.state.rangeFormattingProvider).toBeDefined()
+    expect(mock.state.codeActionProvider).toBeDefined()
   })
 
   it('仅手动保存通过 waitUntil 返回 TextEdit，且保存流程不调用 applyEdit', async () => {
@@ -189,6 +238,13 @@ describe('save event flow', () => {
       expect.objectContaining({ newText: ' ' }),
     ])
     expect(mock.state.applyEdit).not.toHaveBeenCalled()
+  })
+
+  it('自动保存和失焦保存不调用 waitUntil', () => {
+    const waitUntil = vi.fn()
+    for (const reason of [2, 3])
+      mock.events.willSave[0]!({ document: createDocument(), reason, waitUntil })
+    expect(waitUntil).not.toHaveBeenCalled()
   })
 
   it('只在忽略指令中提供指令和规则码补全', () => {
@@ -281,6 +337,62 @@ describe('save event flow', () => {
     mock.state.formatOnDocument = true
     mock.state.exclude = ['**/*.md']
     expect(mock.state.formattingProvider.provideDocumentFormattingEdits(createDocument())).toEqual([])
+  })
+
+  it('标准 Format Selection 只返回选区内的编辑', () => {
+    mock.state.formatOnDocument = true
+    const text = '中文English\n中文English'
+    const document = createDocument('file:///test.md', text)
+    const edits = mock.state.rangeFormattingProvider.provideDocumentRangeFormattingEdits(document, {
+      start: { line: 1, character: 0 },
+      end: { line: 1, character: text.length },
+    })
+    expect(edits).toHaveLength(1)
+    expect(edits[0].range.start.line).toBe(1)
+  })
+
+  it('Quick Fix 只修复当前诊断，Fix All 修复全文', () => {
+    const document = createDocument('file:///test.md', '中文English 中文English')
+    const diagnostic = {
+      source: 'markdown-auto-space',
+      code: { value: 'MAS001' },
+      range: { start: { line: 0, character: 2 }, end: { line: 0, character: 4 } },
+    }
+    const actions = mock.state.codeActionProvider.provideCodeActions(document, {
+      start: { line: 0, character: 0 },
+      end: { line: 0, character: 10 },
+    }, { diagnostics: [diagnostic] })
+    expect(actions).toHaveLength(2)
+    expect(actions[0].kind).toBe('quickfix')
+    expect(actions[0].title).toContain('MAS001')
+    expect(actions[1].kind).toBe('source.fixAll')
+    expect(actions[0].edit.changes.get(document.uri.toString())).toHaveLength(1)
+    expect(actions[1].edit.changes.get(document.uri.toString())).toHaveLength(2)
+    expect(actions[0].edit.changes.get(document.uri.toString())[0].range.start.character).toBe(2)
+  })
+
+  it('只请求 Quick Fix 时不返回 Fix All', () => {
+    const document = createDocument()
+    const diagnostic = {
+      source: 'markdown-auto-space',
+      code: 'MAS001',
+      range: { start: { line: 0, character: 2 }, end: { line: 0, character: 4 } },
+    }
+    const actions = mock.state.codeActionProvider.provideCodeActions(document, diagnostic.range, {
+      diagnostics: [diagnostic],
+      only: 'quickfix',
+    })
+    expect(actions.map((action: any) => action.kind)).toEqual(['quickfix'])
+  })
+
+  it('Fix All 在没有局部诊断时仍可返回', () => {
+    const document = createDocument()
+    const actions = mock.state.codeActionProvider.provideCodeActions(document, {
+      start: { line: 0, character: 0 },
+      end: { line: 0, character: 0 },
+    }, { diagnostics: [], only: 'source.fixAll' })
+    expect(actions).toHaveLength(1)
+    expect(actions[0].kind).toBe('source.fixAll')
   })
 
   it('关闭诊断时立即清空集合', () => {
