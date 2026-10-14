@@ -15,6 +15,7 @@ import { getMarkdownAutoSpaceConfig, getMarkdownAutoSpaceDiagnostics, getMarkdow
 
 const vscodeMock = vi.hoisted(() => ({
   exclude: [] as string[],
+  units: undefined as Record<string, unknown> | undefined,
   workspaceFolder: undefined as { name: string, uri: { path: string } } | undefined,
   match: vi.fn(() => 0),
 }))
@@ -71,6 +72,8 @@ vi.mock('vscode', () => {
             return true
           if (key === 'exclude')
             return vscodeMock.exclude
+          if (key === 'units')
+            return vscodeMock.units
           return undefined
         },
       }),
@@ -395,6 +398,12 @@ describe('applyDigitUnitSpace', () => {
   it('字母紧贴数字不拆（如 Python3）', () => {
     expect(applyDigitUnitSpace('Python3与10Gbps')).toBe('Python3与10 Gbps')
   })
+  it('支持追加、排除和特殊字符单位', () => {
+    expect(applyDigitUnitSpace('转速120rpm，能耗3kWh，精度8μm', { additional: ['rpm', 'kWh', 'μm'] })).toBe('转速120 rpm，能耗3 kWh，精度8 μm')
+    expect(applyDigitUnitSpace('10TB和10Gbps', { exclude: ['TB'] })).toBe('10TB和10 Gbps')
+    expect(applyDigitUnitSpace('1a+b', { additional: ['a+b'] })).toBe('1 a+b')
+    expect(applyDigitUnitSpace('1rpm 2rpm', { additional: ['rpm', 'rpm', '', 'bad unit', 3] })).toBe('1 rpm 2 rpm')
+  })
 })
 
 describe('applyTightDegreePercent', () => {
@@ -439,6 +448,13 @@ describe('getLineViolations', () => {
   it('关闭 MAS007 时不报 MAS007', () => {
     const v = getLineViolations('正文10Gbps', { ...allOn, digitUnitSpace: false })
     expect(v.filter(x => x.code === 'MAS007')).toHaveLength(0)
+  })
+  it('自定义单位同时用于诊断', () => {
+    expect(getLineViolations('转速120rpm', allOn, { additional: ['rpm'] }).some(x => x.code === 'MAS007')).toBe(true)
+    expect(getLineViolations('容量20TB', allOn, { exclude: ['TB'] }).some(x => x.code === 'MAS007')).toBe(false)
+    expect(getLineViolations('[转速120rpm](https://example.com)', allOn, { additional: ['rpm'] }).some(x => x.code === 'MAS007')).toBe(true)
+    expect(getLineViolations('![转速120rpm](image.png)', allOn, { additional: ['rpm'] }).some(x => x.code === 'MAS007')).toBe(false)
+    expect(getLineViolations('`[转速120rpm](url)`', allOn, { additional: ['rpm'] }).some(x => x.code === 'MAS007')).toBe(false)
   })
   it('空行无违规', () => {
     expect(getLineViolations('', allOn)).toHaveLength(0)
@@ -793,5 +809,18 @@ describe('getMarkdownAutoSpaceConfig', () => {
     expect(config.formatOnSave).toBe(true)
     expect(config.exclude).toEqual([])
     expect('spaceType' in config).toBe(false)
+  })
+  it('默认 additional 为空时仍读取 include 别名', () => {
+    vscodeMock.units = { additional: [], include: ['rpm'], exclude: [] }
+    try {
+      const document = createMockDocument('转速120rpm')
+      expect(getMarkdownAutoSpaceConfig(document).units.additional).toEqual(['rpm'])
+      expect(getMarkdownAutoSpaceEdits(document, '转速120rpm')).toEqual(expect.arrayContaining([
+        expect.objectContaining({ newText: ' ' }),
+      ]))
+    }
+    finally {
+      vscodeMock.units = undefined
+    }
   })
 })

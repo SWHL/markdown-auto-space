@@ -115,7 +115,7 @@ code --install-extension SWHL.markdown-auto-space
 - `MAS008`: 度数、百分号与数字之间不应有空格
 - `MAS009`: 全形标点旁不应有空格
 
-启用诊断或切换 `markdownAutoSpace.rules` 中的任一规则后，所有已打开的 Markdown 文档会立即更新诊断，无需再次编辑或保存。关闭诊断后，问题面板中的提示和编辑器波浪线会立即清空；其他配置变化不会触发全量诊断刷新。
+启用诊断、切换 `markdownAutoSpace.rules` 中的任一规则，或修改 `markdownAutoSpace.units` 后，所有已打开的 Markdown 文档会立即更新诊断，无需再次编辑或保存。关闭诊断后，问题面板中的提示和编辑器波浪线会立即清空；其他配置变化不会触发全量诊断刷新。
 
 ## Configuration
 
@@ -126,6 +126,7 @@ code --install-extension SWHL.markdown-auto-space
 | `markdownAutoSpace.formatOnDocument` | `false` | 执行 Format Document 时修正 |
 | `markdownAutoSpace.exclude` | `[]` | 在所有格式化、命令和诊断中排除匹配的文件 |
 | `markdownAutoSpace.rules` | 全部开启 | 按规则码单独开关 MAS001–MAS009 |
+| `markdownAutoSpace.units` | `{ "additional": [], "exclude": [] }` | 自定义 MAS007 单位；`additional` 追加默认单位，`exclude` 排除单位 |
 
 例如关闭部分规则：
 
@@ -137,6 +138,19 @@ code --install-extension SWHL.markdown-auto-space
   }
 }
 ```
+
+例如追加领域单位，或排除会与产品型号冲突的默认单位：
+
+```json
+{
+  "markdownAutoSpace.units": {
+    "additional": ["rpm", "kWh", "μm"],
+    "exclude": ["V"]
+  }
+}
+```
+
+非法、空白或重复单位会被忽略；单位会安全转义后用于匹配。自定义单位同时用于正文、超链接文本的格式化和 MAS007 诊断。`additional` 与 `include` 中的单位会合并；也可只使用 `include` 作为 `additional` 的别名。
 
 例如排除所有工作区根目录下的 `CHANGELOG.md` 和 `generated` 目录：
 
@@ -177,7 +191,7 @@ code --install-extension SWHL.markdown-auto-space
 
 | 版本 | 摘要 |
 |------|------|
-| **未发布** | 重构保存格式化流程；保存时通过 `waitUntil` 返回编辑并由 VS Code 保存事务应用；全文、选区和命令格式化改用最小范围编辑；保留 LF / CRLF 换行并补充多行、多处变化、无变化及混合换行测试；诊断开关或规则变化后立即更新已打开文档的诊断 |
+| **未发布** | 重构保存格式化流程；保存时通过 `waitUntil` 返回编辑并由 VS Code 保存事务应用；全文、选区和命令格式化改用最小范围编辑；保留 LF / CRLF 换行并补充多行、多处变化、无变化及混合换行测试；诊断开关、规则或 MAS007 单位配置变化后立即更新已打开文档的诊断 |
 | **0.0.8** | 重写 Marketplace 文案与关键词；新增更接近真实 VS Code 的横向宣传图；优化商店展示与 VSIX 体积 |
 | **0.0.7** | 优化格式化稳定性与选区处理；新增自动发版工作流；精简 CI 与发布链路 |
 | **0.0.6** | 新增 MAS007–MAS009：数字与单位、度 / 百分号、全形标点旁空格规则 |

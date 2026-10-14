@@ -127,11 +127,20 @@ export function getMarkdownAutoSpaceConfig(document?: TextDocument): AutoSpaceCo
     : []
   const rulesRaw = config.get('rules') as Record<string, boolean> | undefined
   const rules = normalizeRules(rulesRaw)
+  const unitsRaw = config.get('units') as Record<string, unknown> | undefined
+  const units = {
+    additional: [
+      ...(Array.isArray(unitsRaw?.additional) ? unitsRaw.additional : []),
+      ...(Array.isArray(unitsRaw?.include) ? unitsRaw.include : []),
+    ].filter((unit): unit is string => typeof unit === 'string'),
+    exclude: Array.isArray(unitsRaw?.exclude) ? unitsRaw.exclude.filter((unit): unit is string => typeof unit === 'string') : [],
+  }
   return {
     formatOnSave,
     formatOnDocument,
     exclude,
     rules,
+    units,
   }
 }
 
@@ -178,8 +187,8 @@ export function getMarkdownAutoSpaceEdits(
   if (!shouldProcessFile(document))
     return undefined
 
-  const { rules } = getMarkdownAutoSpaceConfig(document)
-  const updatedText = processMarkdownContent(text, rules)
+  const { rules, units } = getMarkdownAutoSpaceConfig(document)
+  const updatedText = processMarkdownContent(text, rules, units)
   return getMinimalTextEdits(document, text, updatedText)
 }
 
@@ -187,8 +196,8 @@ export function getMarkdownAutoSpaceEdits(
 export function getMarkdownAutoSpaceChangeCount(document: TextDocument, text: string): number {
   if (!shouldProcessFile(document))
     return 0
-  const { rules } = getMarkdownAutoSpaceConfig(document)
-  return getMinimalTextChanges(text, processMarkdownContent(text, rules)).length
+  const { rules, units } = getMarkdownAutoSpaceConfig(document)
+  return getMinimalTextChanges(text, processMarkdownContent(text, rules, units)).length
 }
 
 /**
@@ -208,8 +217,8 @@ export function getMarkdownAutoSpaceDiagnostics(
   if (diagnosticsEnabled === false)
     return []
 
-  const { rules } = getMarkdownAutoSpaceConfig(document)
-  const violations = getMarkdownSpaceViolations(text, rules)
+  const { rules, units } = getMarkdownAutoSpaceConfig(document)
+  const violations = getMarkdownSpaceViolations(text, rules, units)
   const diagnostics: Diagnostic[] = []
   for (const v of violations) {
     if (v.lineIndex >= document.lineCount)
@@ -246,7 +255,7 @@ export function markdownAutoSpace(text: string) {
   if (!shouldProcessFile(document))
     return
 
-  const { rules } = getMarkdownAutoSpaceConfig(document)
-  const updatedText = processMarkdownContent(text, rules)
+  const { rules, units } = getMarkdownAutoSpaceConfig(document)
+  const updatedText = processMarkdownContent(text, rules, units)
   return getMinimalTextEdits(document, text, updatedText)
 }

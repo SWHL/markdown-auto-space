@@ -136,6 +136,37 @@
               "description": "Remove spaces around full-width punctuation."
             }
           }
+        },
+        "markdownAutoSpace.units": {
+          "type": "object",
+          "default": {
+            "additional": [],
+            "exclude": []
+          },
+          "description": "Customize MAS007 units. Additional units are appended to defaults; excluded units are removed.",
+          "properties": {
+            "additional": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": []
+            },
+            "include": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": []
+            },
+            "exclude": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": []
+            }
+          }
         }
       }
     }

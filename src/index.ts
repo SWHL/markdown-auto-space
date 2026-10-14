@@ -182,8 +182,9 @@ function getRuleHover(document: vscode.TextDocument, position: vscode.Position):
 function refreshDiagnosticsForConfigurationChange(event: vscode.ConfigurationChangeEvent) {
   const diagnosticsChanged = event.affectsConfiguration('markdownAutoSpace.diagnostics.enable')
   const rulesChanged = event.affectsConfiguration('markdownAutoSpace.rules')
+  const unitsChanged = event.affectsConfiguration('markdownAutoSpace.units')
   const excludeChanged = event.affectsConfiguration('markdownAutoSpace.exclude')
-  if (!diagnosticsChanged && !rulesChanged && !excludeChanged)
+  if (!diagnosticsChanged && !rulesChanged && !unitsChanged && !excludeChanged)
     return
 
   const diagnosticsEnabled = vscode.workspace

@@ -14,6 +14,11 @@ export interface MarkdownSpaceRulesType {
   noSpaceAroundCjkPunct: boolean
 }
 
+export interface DigitUnitConfig {
+  additional: string[]
+  exclude: string[]
+}
+
 export const DEFAULT_MARKDOWN_SPACE_RULES: MarkdownSpaceRulesType = {
   chineseAlnum: true,
   chineseBacktick: true,
@@ -61,6 +66,7 @@ export interface AutoSpaceConfigType {
   formatOnDocument: boolean
   exclude: string[]
   rules: MarkdownSpaceRulesType
+  units: DigitUnitConfig
 }
 
 /**

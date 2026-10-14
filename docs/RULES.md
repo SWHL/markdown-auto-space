@@ -31,7 +31,7 @@
 | **MAS008** | `MAS008` | 度数、百分号与数字之间不应有空格 |
 | **MAS009** | `MAS009` | 全形句读标点旁不应有空格 |
 
-在 VS Code 中开启 `markdownAutoSpace.diagnostics.enable` 后，违反上述规则的位置会显示波浪线，悬停可看到规则码与说明。
+在 VS Code 中开启 `markdownAutoSpace.diagnostics.enable` 后，违反上述规则的位置会显示波浪线，悬停可看到规则码与说明。修改 `markdownAutoSpace.rules` 或 `markdownAutoSpace.units` 后，已打开文档的诊断会立即刷新。
 
 ## 代码块保护
 
@@ -232,6 +232,19 @@
 **单位表（节选）**：`Gbps`、`Mbps`、`Kbps`、`TB`/`GB`/`MB`/`KB`、`TiB`/`GiB`/`MiB`/`KiB`、`GHz`/`MHz`/`kHz`/`Hz`、`mAh`、`ms`、`ns`、`px`、`dpi`、`V`、`W`、`bps`、`THz` 等；未列入的常见单位可提 issue 扩展。
 
 **未覆盖**：`4K`、`1080p` 等习惯连写；紧贴字母数字的产品型号（如 `Python3`）不会误拆。
+
+可通过 `markdownAutoSpace.units` 扩展单位，而无需复制默认列表：
+
+```json
+{
+  "markdownAutoSpace.units": {
+    "additional": ["rpm", "kWh", "μm"],
+    "exclude": ["V"]
+  }
+}
+```
+
+`additional` 和 `include` 中的单位会合并追加，`exclude` 会从默认及追加列表中移除单位。非法、空白和重复值会忽略；单位会转义后再构造并缓存正则。配置同时影响正文和超链接文本的格式化及 MAS007 诊断。图片说明、行内代码和链接地址仍受保护。
 
 配置键：`markdownAutoSpace.rules.MAS007`，默认 `true`。
 

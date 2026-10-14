@@ -8,23 +8,62 @@ import type { MarkdownSpaceRulesType } from './type'
 const PROTECTED_PLACEHOLDER = '__PROTECTED_'
 
 /** 数字与单位：按长度降序，避免 Mbps 被拆成 M + bps */
-const DIGIT_UNIT_SUFFIXES = [
+const DEFAULT_DIGIT_UNIT_SUFFIXES = [
   'Gbps', 'Mbps', 'Kbps', 'TiB', 'GiB', 'MiB', 'KiB', 'THz', 'GHz', 'MHz', 'kHz',
   'mAh', 'dpi', 'bps', 'TB', 'GB', 'MB', 'KB', 'Hz', 'ms', 'ns', 'px', 'V', 'W',
 ] as const
 
-const DIGIT_UNIT_PATTERN = DIGIT_UNIT_SUFFIXES.join('|')
+export interface DigitUnitOptions {
+  additional?: unknown
+  include?: unknown
+  exclude?: unknown
+}
+
+const digitUnitRegexCache = new Map<string, RegExp>()
+const digitUnitRegexObjectCache = new WeakMap<object, RegExp>()
+
+function normalizeUnitValues(value: unknown): string[] {
+  if (!Array.isArray(value))
+    return []
+  return [...new Set(value.filter((unit): unit is string => typeof unit === 'string')
+    .map(unit => unit.trim())
+    .filter(unit => unit.length > 0 && unit.length <= 32 && !/\s/u.test(unit)))]
+}
+
+function getDigitUnitRegex(options: DigitUnitOptions = {}): RegExp {
+  const objectOptions = options as object
+  const objectCached = digitUnitRegexObjectCache.get(objectOptions)
+  if (objectCached)
+    return objectCached
+  const additional = normalizeUnitValues([
+    ...normalizeUnitValues(options.additional),
+    ...normalizeUnitValues(options.include),
+  ])
+  const excluded = new Set(normalizeUnitValues(options.exclude))
+  const units = [...new Set([...DEFAULT_DIGIT_UNIT_SUFFIXES, ...additional])]
+    .filter(unit => !excluded.has(unit))
+    .sort((a, b) => b.length - a.length || a.localeCompare(b))
+  const key = units.join('\u0000')
+  const cached = digitUnitRegexCache.get(key)
+  if (cached) {
+    digitUnitRegexObjectCache.set(objectOptions, cached)
+    return cached
+  }
+  const escaped = units.map(unit => unit.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+  const regex = escaped.length === 0
+    ? /(?!) /gu
+    : new RegExp(`(?<![A-Za-z0-9_])(\\d+(?:\\.\\d+)?)(${escaped.join('|')})(?![A-Za-z0-9])`, 'gu')
+  digitUnitRegexCache.set(key, regex)
+  digitUnitRegexObjectCache.set(objectOptions, regex)
+  return regex
+}
 
 /**
  * 数字（可含一位小数）与单位之间加空格，不与字母数字粘连
  * @param text
  */
-export function applyDigitUnitSpace(text: string): string {
-  const re = new RegExp(
-    `(?<![A-Za-z0-9_])(\\d+(?:\\.\\d+)?)(${DIGIT_UNIT_PATTERN})(?![A-Za-z0-9])`,
-    'g',
-  )
-  return text.replace(re, '$1 $2')
+export function applyDigitUnitSpace(text: string, options: DigitUnitOptions = {}): string {
+  return text.replace(getDigitUnitRegex(options), '$1 $2')
 }
 
 /**
@@ -62,10 +101,10 @@ export function applyNoSpaceAroundCjkPunct(text: string): string {
  * @param linkText
  * @param options
  */
-function applyLinkTextPostRules(linkText: string, options: MarkdownSpaceRulesType): string {
+function applyLinkTextPostRules(linkText: string, options: MarkdownSpaceRulesType, units: DigitUnitOptions = {}): string {
   let lt = linkText
   if (options.digitUnitSpace)
-    lt = applyDigitUnitSpace(lt)
+    lt = applyDigitUnitSpace(lt, units)
   if (options.tightDegreePercent)
     lt = applyTightDegreePercent(lt)
   if (options.noSpaceAroundCjkPunct)
@@ -128,11 +167,11 @@ function mergeRanges(ranges: [number, number][]): [number, number][] {
  *
  * @param line
  */
-function collectProtectedRanges(line: string): [number, number][] {
+function collectProtectedRanges(line: string, protectLinks = true): [number, number][] {
   const patterns = [
     /(`+)([\s\S]*?)\1/g,
     /!\[[^\]]*\]\([^)]+\)/g,
-    /\[([^\]]+)\]\(([^)]+)\)/g,
+    ...(protectLinks ? [/\[([^\]]+)\]\(([^)]+)\)/g] : []),
     /<\/?[a-zA-Z][^>]*>/g,
     /<!--[\s\S]*?-->/g,
     /https?:\/\/[a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=%]+/g,
@@ -150,6 +189,19 @@ function collectProtectedRanges(line: string): [number, number][] {
   return mergeRanges(ranges)
 }
 
+function collectLinkTextRanges(line: string): [number, number][] {
+  const ranges: [number, number][] = []
+  const re = /!?\[([^\]]+)\]\([^)]+\)/g
+  let match: RegExpExecArray | null
+  while ((match = re.exec(line)) !== null) {
+    if (match[0].startsWith('!'))
+      continue
+    const start = match.index + 1
+    ranges.push([start, start + match[1]!.length])
+  }
+  return ranges
+}
+
 /**
  *
  * @param ranges
@@ -159,11 +211,6 @@ function collectProtectedRanges(line: string): [number, number][] {
 function rangeOverlaps(ranges: [number, number][], start: number, end: number): boolean {
   return ranges.some(([a, b]) => start < b && end > a)
 }
-
-const DIGIT_UNIT_VIOLATION_RE = new RegExp(
-  `(?<![A-Za-z0-9_])(\\d+(?:\\.\\d+)?)(${DIGIT_UNIT_PATTERN})(?![A-Za-z0-9])`,
-  'g',
-)
 
 /**
  * 比较原始行与处理后行，找出「插入空格」的位置（在原始行中的起始下标，高亮两字符）
@@ -217,9 +264,12 @@ function emptyRules(): MarkdownSpaceRulesType {
 export function getLineViolations(
   line: string,
   rules: MarkdownSpaceRulesType,
+  units: DigitUnitOptions = {},
 ): { start: number, length: number, ruleId: keyof MarkdownSpaceRulesType, code: string, message: string }[] {
   const violations: { start: number, length: number, ruleId: keyof MarkdownSpaceRulesType, code: string, message: string }[] = []
   const protectedRanges = collectProtectedRanges(line)
+  const linkTextRanges = collectLinkTextRanges(line)
+  const nonLinkProtectedRanges = collectProtectedRanges(line, false)
   const seenStarts = new Set<number>()
 
   const pushUnique = (start: number, length: number, ruleId: keyof MarkdownSpaceRulesType) => {
@@ -240,12 +290,16 @@ export function getLineViolations(
 
   if (rules.digitUnitSpace) {
     let m: RegExpExecArray | null
-    DIGIT_UNIT_VIOLATION_RE.lastIndex = 0
-    while ((m = DIGIT_UNIT_VIOLATION_RE.exec(line)) !== null) {
-      const num = m[1]!
-      const start = m.index + num.length
-      const end = start + (m[2]!.length)
-      if (!rangeOverlaps(protectedRanges, m.index, end))
+    const digitUnitViolationRe = getDigitUnitRegex(units)
+    digitUnitViolationRe.lastIndex = 0
+    while ((m = digitUnitViolationRe.exec(line)) !== null) {
+      const match = m
+      const num = match[1]!
+      const start = match.index + num.length
+      const end = start + (match[2]!.length)
+      const inLinkText = linkTextRanges.some(([start, finish]) => match.index >= start && end <= finish)
+      if (!rangeOverlaps(nonLinkProtectedRanges, match.index, end)
+        && (!rangeOverlaps(protectedRanges, match.index, end) || inLinkText))
         pushUnique(start > 0 ? start - 1 : start, Math.min(2, line.length - (start > 0 ? start - 1 : start)), 'digitUnitSpace')
     }
   }
@@ -335,6 +389,7 @@ export function getLineViolations(
 export function addSpacesBetweenChineseAndAlnum(
   text: string,
   options: MarkdownSpaceRulesType = DEFAULT_RULES,
+  units: DigitUnitOptions = {},
 ): string {
   const protectedItems: string[] = []
 
@@ -423,7 +478,7 @@ export function addSpacesBetweenChineseAndAlnum(
   }
 
   if (options.digitUnitSpace)
-    result = applyDigitUnitSpace(result)
+    result = applyDigitUnitSpace(result, units)
 
   if (options.tightDegreePercent)
     result = applyTightDegreePercent(result)
@@ -445,7 +500,7 @@ export function addSpacesBetweenChineseAndAlnum(
       const linkMatch = item.match(/^\[([^\]]+)\]\(([^)]+)\)$/)
       if (linkMatch && !linkMatch[1].startsWith('!')) {
         const [, linkText, linkUrl] = linkMatch
-        item = `[${applyLinkTextPostRules(linkText, options)}](${linkUrl})`
+        item = `[${applyLinkTextPostRules(linkText, options, units)}](${linkUrl})`
       }
       return item
     })
@@ -671,6 +726,7 @@ export function getSkippedLineIndices(content: string): Set<number> {
 export function processMarkdownContent(
   content: string,
   rules: MarkdownSpaceRulesType = DEFAULT_RULES,
+  units: DigitUnitOptions = {},
 ): string {
   const lines = content.split(/\r\n|\n/)
   const lineBreaks = content.match(/\r\n|\n/g) ?? []
@@ -684,7 +740,7 @@ export function processMarkdownContent(
       continue
     }
 
-    newLines.push(addSpacesBetweenChineseAndAlnum(line, processingInfo.rulesByLine.get(lineIndex) ?? rules))
+    newLines.push(addSpacesBetweenChineseAndAlnum(line, processingInfo.rulesByLine.get(lineIndex) ?? rules, units))
   }
 
   return newLines.map((line, index) => line + (lineBreaks[index] ?? '')).join('')
@@ -707,6 +763,7 @@ export interface MarkdownSpaceViolation {
 export function getMarkdownSpaceViolations(
   content: string,
   rules: MarkdownSpaceRulesType = DEFAULT_RULES,
+  units: DigitUnitOptions = {},
 ): MarkdownSpaceViolation[] {
   const lines = content.split('\n')
   const processingInfo = getLineProcessingInfo(content, rules)
@@ -717,7 +774,7 @@ export function getMarkdownSpaceViolations(
     if (processingInfo.skippedLineIndices.has(lineIndex))
       continue
 
-    const lineViolations = getLineViolations(line, processingInfo.rulesByLine.get(lineIndex) ?? rules)
+    const lineViolations = getLineViolations(line, processingInfo.rulesByLine.get(lineIndex) ?? rules, units)
     for (const v of lineViolations) {
       out.push({
         lineIndex,
