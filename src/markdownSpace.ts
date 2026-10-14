@@ -88,16 +88,16 @@ const DEFAULT_RULES: MarkdownSpaceRulesType = {
 }
 
 /** 规则码与说明（用于诊断提示，类似 markdownlint 的 MDxxx） */
-export const RULE_DIAGNOSTIC_MAP: Record<keyof MarkdownSpaceRulesType, { code: string, message: string }> = {
-  chineseAlnum: { code: 'MAS001', message: '中英文/数字之间应有空格' },
-  chineseBacktick: { code: 'MAS002', message: '中文与行内代码（反引号）之间应有空格' },
-  chineseLinkUrl: { code: 'MAS003', message: '中文与链接/URL 之间应有空格' },
-  chineseLinkText: { code: 'MAS006', message: '超链接 [] 内中英文混排时英文左右应有空格' },
-  dunhaoToComma: { code: 'MAS004', message: '英文/数字间的顿号应改为逗号+空格' },
-  slashSpace: { code: 'MAS005', message: '斜杠与中文之间应有空格' },
-  digitUnitSpace: { code: 'MAS007', message: '数字与单位之间应有空格' },
-  tightDegreePercent: { code: 'MAS008', message: '度数、百分号与数字之间不应有空格' },
-  noSpaceAroundCjkPunct: { code: 'MAS009', message: '全形标点旁不应有空格' },
+export const RULE_DIAGNOSTIC_MAP: Record<keyof MarkdownSpaceRulesType, { code: string, message: string, description: string, examples: [string, string][] }> = {
+  chineseAlnum: { code: 'MAS001', message: '中英文/数字之间应有空格', description: '在中文与英文或数字之间补充空格。', examples: [['中文English', '中文 English'], ['价格100元', '价格 100 元']] },
+  chineseBacktick: { code: 'MAS002', message: '中文与行内代码（反引号）之间应有空格', description: '在中文与行内代码之间补充空格。', examples: [['使用`code`库', '使用 `code` 库']] },
+  chineseLinkUrl: { code: 'MAS003', message: '中文与链接/URL 之间应有空格', description: '在中文与链接或 URL 的边界补充空格。', examples: [['查看[文档](url)', '查看 [文档](url)']] },
+  chineseLinkText: { code: 'MAS006', message: '超链接 [] 内中英文混排时英文左右应有空格', description: '在链接文本中的中文与英文或数字之间补充空格。', examples: [['[配置import](url)', '[配置 import](url)']] },
+  dunhaoToComma: { code: 'MAS004', message: '英文/数字间的顿号应改为逗号+空格', description: '将英文或数字之间的顿号替换为逗号和空格。', examples: [['Python、Java', 'Python, Java']] },
+  slashSpace: { code: 'MAS005', message: '斜杠与中文之间应有空格', description: '仅在斜杠邻近中文时补充空格。', examples: [['前端/后端', '前端 / 后端'], ['CPU/GPU', 'CPU/GPU']] },
+  digitUnitSpace: { code: 'MAS007', message: '数字与单位之间应有空格', description: '在数字与常见单位之间补充空格。', examples: [['10Gbps', '10 Gbps']] },
+  tightDegreePercent: { code: 'MAS008', message: '度数、百分号与数字之间不应有空格', description: '移除数字与度数或百分号之间多余的空格。', examples: [['15 %', '15%']] },
+  noSpaceAroundCjkPunct: { code: 'MAS009', message: '全形标点旁不应有空格', description: '移除全形标点旁多余的 ASCII 空格。', examples: [['iPhone ，好', 'iPhone，好']] },
 }
 
 /**
@@ -134,6 +134,7 @@ function collectProtectedRanges(line: string): [number, number][] {
     /!\[[^\]]*\]\([^)]+\)/g,
     /\[([^\]]+)\]\(([^)]+)\)/g,
     /<\/?[a-zA-Z][^>]*>/g,
+    /<!--[\s\S]*?-->/g,
     /https?:\/\/[a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=%]+/g,
     /"[^"]*"/g,
     /'[^']*'/g,
@@ -513,6 +514,125 @@ function closesFence(line: string, opening: FencedCodeMarker): boolean {
   return closing !== null && closing.char === opening.char && closing.length >= opening.length
 }
 
+interface LocalIgnoreDirective {
+  kind: 'disable' | 'enable' | 'disable-next-line'
+  ruleIds: (keyof MarkdownSpaceRulesType)[] | null
+}
+
+/** 识别独占一行的 markdownlint 风格局部忽略指令。 */
+function parseLocalIgnoreDirective(line: string): LocalIgnoreDirective | null {
+  const match = /^<!--\s*(?:markdown-auto-space|mas)-(disable-next-line|disable|enable)(?:\s+([^]*?))?\s*-->$/.exec(line.trim())
+  if (!match)
+    return null
+
+  const codeText = match[2]?.trim() ?? ''
+  const ruleIds = codeText
+    ? Object.entries(RULE_DIAGNOSTIC_MAP)
+      .filter(([, meta]) => codeText.split(/\s+/).includes(meta.code))
+      .map(([ruleId]) => ruleId as keyof MarkdownSpaceRulesType)
+    : null
+  return { kind: match[1] as LocalIgnoreDirective['kind'], ruleIds }
+}
+
+function allRuleIds(): (keyof MarkdownSpaceRulesType)[] {
+  return Object.keys(DEFAULT_RULES) as (keyof MarkdownSpaceRulesType)[]
+}
+
+function applyDisabledRules(
+  rules: MarkdownSpaceRulesType,
+  disabled: Set<keyof MarkdownSpaceRulesType>,
+): MarkdownSpaceRulesType {
+  const result = { ...rules }
+  for (const ruleId of disabled)
+    result[ruleId] = false
+  return result
+}
+
+interface LineProcessingInfo {
+  skippedLineIndices: Set<number>
+  rulesByLine: Map<number, MarkdownSpaceRulesType>
+}
+
+function getLineProcessingInfo(
+  content: string,
+  rules: MarkdownSpaceRulesType = DEFAULT_RULES,
+): LineProcessingInfo {
+  const lines = content.split('\n')
+  const skippedLineIndices = new Set<number>()
+  const rulesByLine = new Map<number, MarkdownSpaceRulesType>()
+  let codeFence: FencedCodeMarker | null = null
+  const isYamlDelimiter = (line: string) => line === '---' || line === '---\r'
+  let inYamlFrontMatter = isYamlDelimiter(lines[0] ?? '')
+  const disabled = new Set<keyof MarkdownSpaceRulesType>()
+  let nextLineDirective: LocalIgnoreDirective | null = null
+
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+    const line = lines[lineIndex]!
+    const stripped = line.trim()
+
+    if (inYamlFrontMatter) {
+      skippedLineIndices.add(lineIndex)
+      if (lineIndex > 0 && isYamlDelimiter(line))
+        inYamlFrontMatter = false
+      continue
+    }
+    if (stripped === '---') {
+      skippedLineIndices.add(lineIndex)
+      nextLineDirective = null
+      continue
+    }
+    if (codeFence !== null) {
+      skippedLineIndices.add(lineIndex)
+      nextLineDirective = null
+      if (closesFence(line, codeFence))
+        codeFence = null
+      continue
+    }
+
+    const directive = parseLocalIgnoreDirective(line)
+    if (directive !== null) {
+      skippedLineIndices.add(lineIndex)
+      if (directive.kind === 'disable' || directive.kind === 'enable') {
+        const ids = directive.ruleIds ?? allRuleIds()
+        for (const ruleId of ids) {
+          if (directive.kind === 'disable')
+            disabled.add(ruleId)
+          else
+            disabled.delete(ruleId)
+        }
+      }
+      else if (directive.kind === 'disable-next-line') {
+        nextLineDirective = directive
+      }
+      continue
+    }
+
+    const opening = parseFenceOpening(line)
+    if (opening !== null) {
+      codeFence = opening
+      skippedLineIndices.add(lineIndex)
+      nextLineDirective = null
+      continue
+    }
+
+    if (/^(\t| {4})/.test(line)) {
+      skippedLineIndices.add(lineIndex)
+      nextLineDirective = null
+      continue
+    }
+
+    const lineDisabled = new Set(disabled)
+    if (nextLineDirective !== null) {
+      for (const ruleId of nextLineDirective.ruleIds ?? allRuleIds())
+        lineDisabled.add(ruleId)
+      nextLineDirective = null
+    }
+    rulesByLine.set(lineIndex, applyDisabledRules(rules, lineDisabled))
+  }
+
+  return { skippedLineIndices, rulesByLine }
+}
+
 /**
  *
  * @param line
@@ -537,52 +657,10 @@ export function shouldSkipLine(line: string): boolean {
  * @param content
  */
 export function getSkippedLineIndices(content: string): Set<number> {
-  const lines = content.split('\n')
-  const skippedLineIndices = new Set<number>()
-  let codeFence: FencedCodeMarker | null = null
-  const isYamlDelimiter = (line: string) => line === '---' || line === '---\r'
   // YAML front matter is only valid when the document starts with its opening
   // delimiter. An unclosed block remains protected to avoid modifying content
   // whose metadata boundary is ambiguous.
-  let inYamlFrontMatter = isYamlDelimiter(lines[0] ?? '')
-
-  for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
-    const line = lines[lineIndex]!
-    const stripped = line.trim()
-
-    if (inYamlFrontMatter) {
-      skippedLineIndices.add(lineIndex)
-      if (lineIndex > 0 && isYamlDelimiter(line))
-        inYamlFrontMatter = false
-      continue
-    }
-
-    // A horizontal rule is inert in the body; keep the marker itself
-    // untouched without changing any parser state.
-    if (stripped === '---') {
-      skippedLineIndices.add(lineIndex)
-      continue
-    }
-
-    if (codeFence !== null) {
-      skippedLineIndices.add(lineIndex)
-      if (closesFence(line, codeFence))
-        codeFence = null
-      continue
-    }
-
-    const opening = parseFenceOpening(line)
-    if (opening !== null) {
-      codeFence = opening
-      skippedLineIndices.add(lineIndex)
-      continue
-    }
-
-    if (inYamlFrontMatter || /^(\t| {4})/.test(line))
-      skippedLineIndices.add(lineIndex)
-  }
-
-  return skippedLineIndices
+  return getLineProcessingInfo(content).skippedLineIndices
 }
 
 /**
@@ -596,17 +674,17 @@ export function processMarkdownContent(
 ): string {
   const lines = content.split(/\r\n|\n/)
   const lineBreaks = content.match(/\r\n|\n/g) ?? []
-  const skippedLineIndices = getSkippedLineIndices(content)
+  const processingInfo = getLineProcessingInfo(content, rules)
   const newLines: string[] = []
 
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
     const line = lines[lineIndex]!
-    if (skippedLineIndices.has(lineIndex)) {
+    if (processingInfo.skippedLineIndices.has(lineIndex)) {
       newLines.push(line)
       continue
     }
 
-    newLines.push(addSpacesBetweenChineseAndAlnum(line, rules))
+    newLines.push(addSpacesBetweenChineseAndAlnum(line, processingInfo.rulesByLine.get(lineIndex) ?? rules))
   }
 
   return newLines.map((line, index) => line + (lineBreaks[index] ?? '')).join('')
@@ -631,15 +709,15 @@ export function getMarkdownSpaceViolations(
   rules: MarkdownSpaceRulesType = DEFAULT_RULES,
 ): MarkdownSpaceViolation[] {
   const lines = content.split('\n')
-  const skippedLineIndices = getSkippedLineIndices(content)
+  const processingInfo = getLineProcessingInfo(content, rules)
   const out: MarkdownSpaceViolation[] = []
 
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
     const line = lines[lineIndex]!
-    if (skippedLineIndices.has(lineIndex))
+    if (processingInfo.skippedLineIndices.has(lineIndex))
       continue
 
-    const lineViolations = getLineViolations(line, rules)
+    const lineViolations = getLineViolations(line, processingInfo.rulesByLine.get(lineIndex) ?? rules)
     for (const v of lineViolations) {
       out.push({
         lineIndex,

@@ -1,6 +1,7 @@
 import * as vscode from 'vscode'
 import { getMarkdownAutoSpaceChangeCount, getMarkdownAutoSpaceConfig, getMarkdownAutoSpaceDiagnostics, getMarkdownAutoSpaceEdits, isExcluded, shouldProcessFile } from './utils'
-import { shouldRunFormatOnSave } from './type'
+import { getRuleDocUrl, shouldRunFormatOnSave } from './type'
+import { RULE_DIAGNOSTIC_MAP } from './markdownSpace'
 
 let outputChannel: vscode.OutputChannel
 let diagnosticCollection: vscode.DiagnosticCollection
@@ -109,6 +110,75 @@ function flushDiagnosticsUpdate(doc: vscode.TextDocument) {
   updateDiagnostics(doc)
 }
 
+const IGNORE_DIRECTIVE_RE = /^\s*<!--\s*(?:markdown-auto-space|mas)-(?:disable-next-line|disable|enable)\s+(?:MAS\d{3}\s+)*(?:[A-Z0-9]*)$/
+
+function completionRange(document: vscode.TextDocument, position: vscode.Position, start: number): vscode.Range {
+  return new vscode.Range(new vscode.Position(position.line, start), position)
+}
+
+function getRuleCompletionItems(document: vscode.TextDocument, position: vscode.Position): vscode.CompletionItem[] {
+  if (document.languageId !== 'markdown')
+    return []
+  const before = document.lineAt(position.line).text.slice(0, position.character)
+  const items: vscode.CompletionItem[] = []
+  const directivePrefixMatch = /^\s*(<!--\s*(?:markdown-auto-space|mas)-)([a-z-]*)$/.exec(before)
+  const directivePrefix = directivePrefixMatch !== null
+  if (directivePrefix) {
+    for (const kind of ['disable', 'enable', 'disable-next-line']) {
+      const item = new vscode.CompletionItem(kind, vscode.CompletionItemKind.Keyword)
+      item.insertText = kind
+      item.range = completionRange(document, position, position.character - directivePrefixMatch![2]!.length)
+      item.detail = 'Markdown Auto Space 局部忽略指令'
+      item.documentation = new vscode.MarkdownString(kind === 'disable-next-line' ? '忽略下一行的规则。' : '开始或结束局部规则忽略。')
+      items.push(item)
+    }
+  }
+  if (!IGNORE_DIRECTIVE_RE.test(before))
+    return items
+  const ruleTokenMatch = /(?:^|\s)([A-Z0-9]*)$/.exec(before)
+  const tokenStart = ruleTokenMatch ? before.length - ruleTokenMatch[1]!.length : position.character
+  const existingCodes = new Set(before.match(/MAS\d{3}/g) ?? [])
+  return items.concat(Object.values(RULE_DIAGNOSTIC_MAP).filter(rule => !existingCodes.has(rule.code)).map((rule) => {
+    const item = new vscode.CompletionItem(rule.code, vscode.CompletionItemKind.Enum)
+    item.range = completionRange(document, position, tokenStart)
+    item.detail = rule.message
+    item.documentation = new vscode.MarkdownString(`${rule.description}\n\n${rule.examples.map(([input, output]) => `\`${input}\` → \`${output}\``).join('\n\n')}`)
+    return item
+  }))
+}
+
+function getRuleHover(document: vscode.TextDocument, position: vscode.Position): vscode.Hover | undefined {
+  if (document.languageId !== 'markdown')
+    return undefined
+  const line = document.lineAt(position.line).text
+  if (!/^\s*<!--\s*(?:markdown-auto-space|mas)-(?:disable-next-line|disable|enable)(?:\s+[^<>]*?)?\s*-->\s*$/.test(line))
+    return undefined
+  const directiveMatch = /^\s*<!--\s*(?:markdown-auto-space|mas)-(?:disable-next-line|disable|enable)(?:\s+|$)/.exec(line)
+  if (!directiveMatch)
+    return undefined
+  const directiveEnd = line.indexOf('-->', directiveMatch.index)
+  if (directiveEnd < 0)
+    return undefined
+  const codeRegionStart = directiveMatch.index + directiveMatch[0].length
+  const codeRegion = line.slice(codeRegionStart, directiveEnd)
+  const codeRegex = /\bMAS\d{3}\b/g
+  let codeMatch: RegExpExecArray | null
+  let ruleCode: string | undefined
+  while ((codeMatch = codeRegex.exec(codeRegion)) !== null) {
+    const start = codeRegionStart + codeMatch.index
+    const end = start + codeMatch[0].length
+    if (position.character >= start && position.character < end && start < directiveEnd) {
+      ruleCode = codeMatch[0]
+      break
+    }
+  }
+  const rule = Object.values(RULE_DIAGNOSTIC_MAP).find(item => item.code === ruleCode)
+  if (!rule)
+    return undefined
+  const markdown = new vscode.MarkdownString(`**${rule.code}：${rule.message}**\n\n${rule.description}\n\n${rule.examples.map(([input, output]) => `\`${input}\` → \`${output}\``).join('\n\n')}\n\n[查看完整规则文档](${getRuleDocUrl(rule.code)})`)
+  return new vscode.Hover(markdown)
+}
+
 function refreshDiagnosticsForConfigurationChange(event: vscode.ConfigurationChangeEvent) {
   const diagnosticsChanged = event.affectsConfiguration('markdownAutoSpace.diagnostics.enable')
   const rulesChanged = event.affectsConfiguration('markdownAutoSpace.rules')
@@ -208,6 +278,19 @@ export function activate(context: vscode.ExtensionContext) {
     },
   })
   context.subscriptions.push(formattingProvider)
+
+  const registerCompletion = vscode.languages.registerCompletionItemProvider
+  if (typeof registerCompletion === 'function') {
+    context.subscriptions.push(registerCompletion.call(vscode.languages, 'markdown', {
+      provideCompletionItems: getRuleCompletionItems,
+    }, '<', '-', ' '))
+  }
+  const registerHover = vscode.languages.registerHoverProvider
+  if (typeof registerHover === 'function') {
+    context.subscriptions.push(registerHover.call(vscode.languages, 'markdown', {
+      provideHover: getRuleHover,
+    }))
+  }
 
   // 诊断：在编辑器中标注违反「中英文加空格」规则的位置（类似 markdownlint）
   diagnosticCollection = vscode.languages.createDiagnosticCollection('markdown-auto-space')

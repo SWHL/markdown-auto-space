@@ -22,6 +22,8 @@ const mock = vi.hoisted(() => {
     diagnosticDelete: vi.fn(),
     diagnosticClear: vi.fn(),
     formattingProvider: undefined as any,
+    completionProvider: undefined as any,
+    hoverProvider: undefined as any,
   }
   return { events, state }
 })
@@ -39,12 +41,33 @@ vi.mock('vscode', () => {
   class Diagnostic {
     constructor(public range: any, public message: string, public severity: number) { }
   }
+  class Position {
+    constructor(public line: number, public character: number) { }
+  }
+  class CompletionItem {
+    insertText?: string
+    range?: any
+    detail?: string
+    documentation?: any
+    constructor(public label: string, public kind: number) { }
+  }
+  class MarkdownString {
+    constructor(public value: string) { }
+  }
+  class Hover {
+    constructor(public contents: any) { }
+  }
   const register = (name: keyof typeof mock.events) => (listener: any) => {
     mock.events[name].push(listener)
     return { dispose: vi.fn() }
   }
   return {
     Diagnostic,
+    Position,
+    CompletionItem,
+    MarkdownString,
+    Hover,
+    CompletionItemKind: { Keyword: 1, Enum: 2 },
     DiagnosticSeverity: { Information: 1 },
     Range,
     TextEdit,
@@ -60,6 +83,14 @@ vi.mock('vscode', () => {
       match: () => mock.state.exclude.length ? 1 : 0,
       registerDocumentFormattingEditProvider: (_language: string, provider: any) => {
         mock.state.formattingProvider = provider
+        return { dispose: vi.fn() }
+      },
+      registerCompletionItemProvider: (_language: string, provider: any) => {
+        mock.state.completionProvider = provider
+        return { dispose: vi.fn() }
+      },
+      registerHoverProvider: (_language: string, provider: any) => {
+        mock.state.hoverProvider = provider
         return { dispose: vi.fn() }
       },
       createDiagnosticCollection: () => ({
@@ -135,6 +166,8 @@ describe('save event flow', () => {
     mock.state.diagnosticSet.mockClear()
     mock.state.diagnosticDelete.mockClear()
     mock.state.diagnosticClear.mockClear()
+    mock.state.completionProvider = undefined
+    mock.state.hoverProvider = undefined
     activate({ subscriptions: [] } as any)
   })
 
@@ -156,6 +189,42 @@ describe('save event flow', () => {
       expect.objectContaining({ newText: ' ' }),
     ])
     expect(mock.state.applyEdit).not.toHaveBeenCalled()
+  })
+
+  it('只在忽略指令中提供指令和规则码补全', () => {
+    const position = (character: number) => ({ line: 0, character })
+    const doc = (text: string) => ({ ...createDocument('file:///test.md', text), lineAt: () => ({ text }) })
+    expect(mock.state.completionProvider).toBeDefined()
+    for (const text of ['普通文本 mas-disable MAS', '正文 <!-- mas-', '<!-- other --> mas-disable MAS'])
+      expect(mock.state.completionProvider.provideCompletionItems(doc(text), position(text.length))).toEqual([])
+    const directive = '<!-- mas-disable MAS'
+    const items = mock.state.completionProvider.provideCompletionItems(doc(directive), position(directive.length))
+    expect(items.some((item: any) => item.label === 'MAS001')).toBe(true)
+    for (const prefix of ['<!-- mas-', '<!-- markdown-auto-space-']) {
+      const candidates = mock.state.completionProvider.provideCompletionItems(doc(prefix), position(prefix.length))
+      const item = candidates.find((candidate: any) => candidate.label === 'disable')
+      const applied = prefix.slice(0, item.range.start.character) + item.insertText
+      expect(applied).toBe(`${prefix}disable`)
+    }
+    const multi = '<!-- mas-disable MAS005 MAS'
+    const candidates = mock.state.completionProvider.provideCompletionItems(doc(multi), position(multi.length))
+    expect(candidates.some((item: any) => item.label === 'MAS009')).toBe(true)
+    expect(candidates.some((item: any) => item.label === 'MAS005')).toBe(false)
+  })
+
+  it('只在规则码 token 上提供悬停说明', () => {
+    const text = '<!-- mas-disable MAS005 MAS009 -->'
+    const doc = { ...createDocument('file:///test.md', text), lineAt: () => ({ text }) }
+    const mas005 = text.indexOf('MAS005') + 2
+    const hover = mock.state.hoverProvider.provideHover(doc, { line: 0, character: mas005 })
+    expect(hover.contents.value).toContain('MAS005')
+    expect(mock.state.hoverProvider.provideHover(doc, { line: 0, character: 2 })).toBeUndefined()
+    const second = mock.state.hoverProvider.provideHover(doc, { line: 0, character: text.indexOf('MAS009') + 3 })
+    expect(second.contents.value).toContain('MAS009')
+    for (const invalid of ['正文 mas-disable MAS005', '正文 <!-- mas-disable MAS005 -->', '<!-- mas-disable --> MAS005', '<!-- mas-disable XMAS005 -->']) {
+      const invalidDoc = createDocument('file:///test.md', invalid)
+      expect(mock.state.hoverProvider.provideHover(invalidDoc, { line: 0, character: invalid.indexOf('MAS005') + 2 })).toBeUndefined()
+    }
   })
 
   it('formatOnSave 关闭时不会注册保存编辑', () => {

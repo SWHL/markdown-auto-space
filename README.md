@@ -36,6 +36,7 @@ Format Chinese-English spacing in Markdown for VS Code.
 - 支持 **诊断提示（squiggles）**，像 markdownlint 一样直接标出问题位置
 - 支持 **9 条可单独开关的规则（MAS001–MAS009）**
 - 支持按 glob 排除生成文档、CHANGELOG 或特定目录
+- 支持 markdownlint 风格的局部忽略指令，可按规则忽略块或下一行
 - 使用最小范围编辑，只提交实际发生变化的文本区间
 - 支持 **VS Code Desktop** 和 **VS Code for the Web**（`vscode.dev`、`github.dev`）
 
@@ -162,6 +163,11 @@ code --install-extension SWHL.markdown-auto-space
 - 未闭合的 YAML front matter 采用保守策略，后续内容不会被修改或诊断
 - 围栏代码块支持反引号和波浪线，起始围栏为 3 个或更多字符；只有相同字符且长度不短于起始围栏的结束标记才会闭合代码块
 - 未闭合的围栏代码块采用保守策略，后续内容不会被修改或诊断
+- 支持 `<!-- markdown-auto-space-disable MAS005 -->` / `enable` 按规则忽略块，以及独占一行的 `disable-next-line` 忽略下一行；不写规则码时忽略全部规则
+- `disable-next-line` 忽略的是注释后紧接着的一行；当前不支持 `disable-line`，也不支持把指令写在正文行尾。未知规则码不会关闭任何规则，未闭合 `disable` 会保守地忽略到文档末尾。代码围栏和 YAML front matter 内的同名注释不会改变局部忽略状态
+- 忽略指令支持较短的 `mas-disable`、`mas-enable` 和 `mas-disable-next-line` 写法；在指令中输入规则码时可获得 VS Code 补全，悬停规则码可查看说明、示例和完整文档链接
+- 输入 `<!-- mas-` 或 `<!-- markdown-auto-space-` 时会自动提示可用指令，选择后可继续获得规则码提示
+- 补全和悬停仅在完整的独占一行忽略注释中生效，普通正文或其他 HTML 注释中的 `MASxxx` 不会触发规则提示
 
 ## Rule docs
 
@@ -185,8 +191,11 @@ code --install-extension SWHL.markdown-auto-space
 pnpm lint
 pnpm typecheck
 pnpm test
+pnpm build
 pnpm package:vsix
 ```
+
+`pnpm package:vsix` 会生成 `markdown-auto-space-0.0.8.vsix`。在 VS Code 扩展面板中选择“从 VSIX 安装”，安装后执行 `Developer: Reload Window`，确保测试的是最新构建。
 
 针对保存格式化流程，可以在 Extension Development Host 中验证：打开 Markdown 文件，输入 `中文English`、多行混排文本以及带 CRLF 的内容后手动保存。预期只修改实际需要加空格或删空格的位置，代码块内容和换行符保持不变；启用其他 Markdown 格式化插件时，也不会由本扩展全文覆盖文档。
 

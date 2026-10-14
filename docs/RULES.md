@@ -49,6 +49,72 @@
 
 起始围栏和结束围栏必须使用相同字符，且结束围栏的长度不能短于起始围栏。结束标记后只能有空白，不能带语言标识或其他文本；反引号起始围栏后的语言标识不能包含反引号。代码内容中的短围栏或不同字符围栏不会提前结束代码块。未闭合围栏会采用保守策略，后续内容不会被格式化或诊断。
 
+## 局部忽略
+
+如果只有文档中的一小段需要保留品牌名、模板语法或特殊排版，可使用 markdownlint 风格的 HTML 注释指令：
+
+为便于输入，指令支持 `mas-` 短别名；完整的 `markdown-auto-space-` 写法也继续有效。以下两种写法等价：
+
+```md
+<!-- mas-disable MAS005 -->
+<!-- markdown-auto-space-disable MAS005 -->
+```
+
+```md
+<!-- markdown-auto-space-disable -->
+这里保持原样English/模板
+<!-- markdown-auto-space-enable -->
+```
+
+不带规则码时忽略全部规则；也可以只忽略指定规则：
+
+```md
+<!-- markdown-auto-space-disable MAS005 MAS009 -->
+前端/后端，保留特殊排版
+<!-- markdown-auto-space-enable MAS005 MAS009 -->
+```
+
+下一行忽略使用：
+
+```md
+<!-- markdown-auto-space-disable-next-line MAS005 -->
+前端/后端
+```
+
+这里的 `disable-next-line` 是“忽略指令后紧接着的一行”，不是忽略注释所在行。例如上例中，`前端/后端` 不会应用 MAS005，也不会产生 MAS005 诊断；再下一行会恢复正常处理。
+
+本扩展**不支持** `disable-line` 和行尾指令。它们与 `disable-next-line` 的区别如下：
+
+| 形式 | 作用对象 | 当前是否支持 |
+|------|----------|--------------|
+| `<!-- markdown-auto-space-disable-line MAS005 -->` | 指令所在行 | 否 |
+| `文本 <!-- markdown-auto-space-disable-line MAS005 -->` | 包含指令的正文行 | 否 |
+| `<!-- markdown-auto-space-disable-next-line MAS005 -->` | 指令后的下一行 | 是 |
+
+因此，不要写成下面这样来尝试忽略下一行：
+
+```md
+<!-- markdown-auto-space-disable-line MAS005 -->
+前端/后端
+```
+
+应改用：
+
+```md
+<!-- markdown-auto-space-disable-next-line MAS005 -->
+前端/后端
+```
+
+`disable-next-line` 标记必须独占一行。规则码仅接受 `MAS001`–`MAS009`，未知规则码不会关闭任何规则。块级 `disable/enable` 不建立嵌套层，重复 `disable` 不增加层级，遇到对应 `enable` 即恢复；未闭合的 `disable` 会保守地忽略到文档末尾。所有局部忽略指令行不会格式化或产生诊断。代码围栏和 YAML front matter 内的同名注释仍按各自保护规则处理，不会改变局部忽略状态。
+
+`disable-next-line` 严格只消费紧接着的一行。即使目标行是水平分隔线、代码围栏行或缩进代码行，也不会把忽略状态延续到后面的正文。
+
+在 Markdown 文件中输入忽略指令的规则码时，VS Code 会提供 `MAS001`–`MAS009` 的补全；将鼠标悬停在规则码上会显示规则说明、典型输入/输出示例以及完整规则文档链接。普通正文中的 `MAS005` 等文本不会触发这些提示。
+
+输入忽略指令的开头时也会自动提供指令补全。例如输入 `<!-- mas-` 后，可以选择 `mas-disable`、`mas-enable` 或 `mas-disable-next-line`；选择后再输入空格即可继续选择规则码。补全不会在未选择候选项时自动改写正文。
+
+补全和悬停只对完整的、独占一行的 HTML 注释指令生效；普通正文、其他 HTML 注释，以及注释结束符 `-->` 后的文本不会触发规则提示。一个指令中已经写过的规则码不会重复出现在补全列表中。
+
 ---
 
 <a id="mas001"></a>

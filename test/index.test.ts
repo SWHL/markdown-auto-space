@@ -521,6 +521,98 @@ describe('getSkippedLineIndices', () => {
     expect(violations).toHaveLength(2)
     expect(violations.every(v => v.lineIndex === 3 || v.lineIndex === 5)).toBe(true)
   })
+
+  it('局部忽略区域不格式化也不产生诊断', () => {
+    const content = [
+      '正文中文English',
+      '<!-- markdown-auto-space-disable -->',
+      '品牌名中文English/模板',
+      '<!-- markdown-auto-space-enable -->',
+      '后续中文English',
+    ].join('\n')
+    expect(processMarkdownContent(content)).toBe([
+      '正文中文 English',
+      '<!-- markdown-auto-space-disable -->',
+      '品牌名中文English/模板',
+      '<!-- markdown-auto-space-enable -->',
+      '后续中文 English',
+    ].join('\n'))
+    expect(getMarkdownSpaceViolations(content, DEFAULT_MARKDOWN_SPACE_RULES).map(v => v.lineIndex)).toEqual([0, 4])
+  })
+
+  it('局部忽略标记允许行首尾空白，且未闭合时保守跳过到文档末尾', () => {
+    const content = '正文中文English\n  <!-- markdown-auto-space-disable -->  \n忽略中文English\n末尾中文English'
+    expect(processMarkdownContent(content)).toBe('正文中文 English\n  <!-- markdown-auto-space-disable -->  \n忽略中文English\n末尾中文English')
+    expect(getMarkdownSpaceViolations(content, DEFAULT_MARKDOWN_SPACE_RULES).map(v => v.lineIndex)).toEqual([0])
+  })
+
+  it('局部忽略不嵌套：重复 disable 不增加层级，第一个 enable 即恢复', () => {
+    const content = [
+      '<!-- markdown-auto-space-disable -->',
+      '一中文English',
+      '<!-- markdown-auto-space-disable -->',
+      '二中文English',
+      '<!-- markdown-auto-space-enable -->',
+      '三中文English',
+    ].join('\n')
+    expect(processMarkdownContent(content)).toBe([
+      '<!-- markdown-auto-space-disable -->',
+      '一中文English',
+      '<!-- markdown-auto-space-disable -->',
+      '二中文English',
+      '<!-- markdown-auto-space-enable -->',
+      '三中文 English',
+    ].join('\n'))
+  })
+
+  it('代码围栏内的同名注释不会改变局部忽略状态', () => {
+    const content = '```\n<!-- markdown-auto-space-disable -->\n代码中文English\n<!-- markdown-auto-space-enable -->\n```\n正文中文English'
+    expect(processMarkdownContent(content)).toBe('```\n<!-- markdown-auto-space-disable -->\n代码中文English\n<!-- markdown-auto-space-enable -->\n```\n正文中文 English')
+  })
+
+  it('支持按规则块级忽略，并在 enable 后恢复', () => {
+    const content = '<!-- markdown-auto-space-disable MAS001 -->\n中文English/后端\n<!-- markdown-auto-space-enable MAS001 -->\n中文English/后端'
+    expect(processMarkdownContent(content)).toBe('<!-- markdown-auto-space-disable MAS001 -->\n中文English/ 后端\n<!-- markdown-auto-space-enable MAS001 -->\n中文 English/ 后端')
+    const codes = getMarkdownSpaceViolations(content, DEFAULT_MARKDOWN_SPACE_RULES).map(v => v.code)
+    expect(codes).toEqual(['MAS005', 'MAS001', 'MAS005'])
+  })
+
+  it('支持下一行忽略', () => {
+    const content = [
+      '<!-- markdown-auto-space-disable-next-line MAS005 -->',
+      '前端/后端',
+      '中文English',
+    ].join('\n')
+    expect(processMarkdownContent(content)).toBe([
+      '<!-- markdown-auto-space-disable-next-line MAS005 -->',
+      '前端/后端',
+      '中文 English',
+    ].join('\n'))
+    expect(getMarkdownSpaceViolations(content, DEFAULT_MARKDOWN_SPACE_RULES).map(v => v.code)).toEqual(['MAS001'])
+  })
+
+  it('未知规则码不关闭任何实际规则', () => {
+    const content = '<!-- markdown-auto-space-disable MAS999 -->\n中文English'
+    expect(processMarkdownContent(content)).toBe('<!-- markdown-auto-space-disable MAS999 -->\n中文 English')
+  })
+
+  it('支持 mas- 短别名', () => {
+    const content = '<!-- mas-disable MAS005 -->\n前端/后端\n<!-- mas-enable MAS005 -->\n前端/后端'
+    expect(processMarkdownContent(content)).toBe('<!-- mas-disable MAS005 -->\n前端/后端\n<!-- mas-enable MAS005 -->\n前端 / 后端')
+  })
+
+  it('disable-next-line 只消费紧接着的一行，即使该行是水平线', () => {
+    const content = '<!-- mas-disable-next-line MAS005 -->\n---\n前端/后端'
+    expect(processMarkdownContent(content)).toBe('<!-- mas-disable-next-line MAS005 -->\n---\n前端 / 后端')
+    const violations = getMarkdownSpaceViolations(content, DEFAULT_MARKDOWN_SPACE_RULES)
+    expect(violations.length).toBeGreaterThan(0)
+    expect(violations.every(v => v.lineIndex === 2 && v.code === 'MAS005')).toBe(true)
+  })
+
+  it('disable-next-line 遇到代码围栏时不会延续到围栏之后', () => {
+    const content = '<!-- mas-disable-next-line MAS005 -->\n```md\n前端/后端\n```\n前端/后端'
+    expect(processMarkdownContent(content)).toBe('<!-- mas-disable-next-line MAS005 -->\n```md\n前端/后端\n```\n前端 / 后端')
+  })
 })
 
 describe('DEFAULT_MARKDOWN_SPACE_RULES', () => {
