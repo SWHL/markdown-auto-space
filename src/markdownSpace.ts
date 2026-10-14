@@ -7,10 +7,15 @@ import type { MarkdownSpaceRulesType } from './type'
 
 const PROTECTED_PLACEHOLDER = '__PROTECTED_'
 
-/** 数字与单位：按长度降序，避免 Mbps 被拆成 M + bps */
+/** 数字与单位：按长度降序，避免复合单位被拆成短单位。 */
 const DEFAULT_DIGIT_UNIT_SUFFIXES = [
   'Gbps', 'Mbps', 'Kbps', 'TiB', 'GiB', 'MiB', 'KiB', 'THz', 'GHz', 'MHz', 'kHz',
-  'mAh', 'dpi', 'bps', 'TB', 'GB', 'MB', 'KB', 'Hz', 'ms', 'ns', 'px', 'V', 'W',
+  'MB/s', 'GB/s', 'KB/s', 'Gb/s', 'm/s', 'km/h', 'mAh', 'kWh', 'Wh', 'kW', 'MW',
+  '°C', '°F', 'dpi', 'bps', 'TB', 'GB', 'MB', 'KB', 'Hz', 'ms', 'ns', 'ps', 'px',
+  'kPa', 'MPa', 'Pa', 'kJ', 'MJ', 'J', 'kcal', 'cal', 'kN', 'N', 'lm', 'lx', 'ppm', 'ppb',
+  'μm', 'nm', 'mm', 'cm', 'km', 'm', 'mg', 'kg', 'g', 't', 'mL', 'dL', 'L', 'mol',
+  'min', 'h', 's', 'rad', 'mΩ', 'Ω', 'A', 'V', 'W',
+  '公里', '厘米', '毫米', '米', '公斤', '千克', '克', '吨', '升', '毫升', '秒', '分钟', '小时',
 ] as const
 
 export interface DigitUnitOptions {
@@ -50,16 +55,22 @@ function getDigitUnitRegex(options: DigitUnitOptions = {}): RegExp {
     return cached
   }
   const escaped = units.map(unit => unit.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-  const regex = escaped.length === 0
+  let regex = escaped.length === 0
     ? /(?!) /gu
     : new RegExp(`(?<![A-Za-z0-9_])(\\d+(?:\\.\\d+)?)(${escaped.join('|')})(?![A-Za-z0-9])`, 'gu')
+  const slash = String.fromCharCode(92)
+  const digit = `${slash}d`
+  const number = `-?(?:(?:${digit}{1,3}(?:,${digit}{3})+)|${digit}+)(?:${slash}.${digit}+)?`
+  regex = escaped.length === 0
+    ? /(?!) /gu
+    : new RegExp(`(?<![A-Za-z0-9_.,])(${number}(?:${slash}s*[~-]${slash}s*${number})?)(${escaped.join('|')})(?![A-Za-z0-9./])`, 'gu')
   digitUnitRegexCache.set(key, regex)
   digitUnitRegexObjectCache.set(objectOptions, regex)
   return regex
 }
 
 /**
- * 数字（可含一位小数）与单位之间加空格，不与字母数字粘连
+ * 数字（可含负号、小数、千分位或范围）与单位之间加空格，不与字母数字粘连
  * @param text
  */
 export function applyDigitUnitSpace(text: string, options: DigitUnitOptions = {}): string {
@@ -75,9 +86,9 @@ export function applyTightDegreePercent(text: string): string {
   let prev = ''
   while (prev !== result) {
     prev = result
-    result = result.replace(/(\d+)\s+([°%％])/g, '$1$2')
+    result = result.replace(/(\d+)\s+(°(?![CF])|[%％])/g, '$1$2')
   }
-  result = result.replace(/([°%％])(?=[\u4e00-\u9fff])/g, '$1 ')
+  result = result.replace(/(°(?![CF])|[%％])(?=[\u4e00-\u9fff])/g, '$1 ')
   return result
 }
 
@@ -305,7 +316,7 @@ export function getLineViolations(
   }
 
   if (rules.tightDegreePercent) {
-    const re = /(\d+)(\s+)([°%％])/g
+    const re = /(\d+)(\s+)(°(?![CF])|[%％])/g
     let m: RegExpExecArray | null
     while ((m = re.exec(line)) !== null) {
       const spStart = m.index + m[1]!.length

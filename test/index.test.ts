@@ -404,6 +404,18 @@ describe('applyDigitUnitSpace', () => {
     expect(applyDigitUnitSpace('1a+b', { additional: ['a+b'] })).toBe('1 a+b')
     expect(applyDigitUnitSpace('1rpm 2rpm', { additional: ['rpm', 'rpm', '', 'bad unit', 3] })).toBe('1 rpm 2 rpm')
   })
+  it('支持负数、千分位、范围和复合单位', () => {
+    expect(applyDigitUnitSpace('-10GB、1,024KB、10~20ms、10-20ms')).toBe('-10 GB、1,024 KB、10~20 ms、10-20 ms')
+    expect(applyDigitUnitSpace('吞吐量100MB/s，速度5m/s')).toBe('吞吐量100 MB/s，速度5 m/s')
+  })
+  it('支持温度、SI 和中文常用单位，同时不拆版本号与路径', () => {
+    expect(applyDigitUnitSpace('温度25°C，长度12mm，重量3公斤')).toBe('温度25 °C，长度12 mm，重量3 公斤')
+    expect(applyDigitUnitSpace('版本v3.6.0、路径release/v3.0')).toBe('版本v3.6.0、路径release/v3.0')
+  })
+  it('不修改普通路径、非法千分位或版本号尾部', () => {
+    expect(applyDigitUnitSpace('assets/10GB/file、assets/10m/s/file')).toBe('assets/10GB/file、assets/10m/s/file')
+    expect(applyDigitUnitSpace('12,34KB、1.2.3m、v1.2.3m')).toBe('12,34KB、1.2.3m、v1.2.3m')
+  })
 })
 
 describe('applyTightDegreePercent', () => {
@@ -413,6 +425,9 @@ describe('applyTightDegreePercent', () => {
   })
   it('全角％同样处理', () => {
     expect(applyTightDegreePercent('50 ％完成')).toBe('50％ 完成')
+  })
+  it('温度单位保留数字与 °C/°F 之间的空格', () => {
+    expect(processMarkdownContent('温度25°C和32°F')).toBe('温度 25 °C 和 32 °F')
   })
 })
 

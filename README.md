@@ -52,7 +52,7 @@ Format Chinese-English spacing in Markdown for VS Code.
 | 英文 / 数字之间的顿号改为逗号加空格 | MAS004 | `Python、Java` -> `Python, Java` |
 | 斜杠与中文之间加空格 | MAS005 | `前端/后端` -> `前端 / 后端` |
 | 链接文本 `[]` 内中英混排加空格 | MAS006 | `[配置import](url)` -> `[配置 import](url)` |
-| 数字与单位之间加空格 | MAS007 | `10Gbps` -> `10 Gbps` |
+| 数字与单位之间加空格 | MAS007 | `10Gbps` -> `10 Gbps`；`10~20ms` -> `10~20 ms` |
 | 百分号 / 度数与数字之间不留空格 | MAS008 | `15 %` -> `15%` |
 | 全形标点旁去掉多余空格 | MAS009 | `iPhone ，好` -> `iPhone，好` |
 
