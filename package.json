@@ -77,6 +77,15 @@
           "default": false,
           "description": "Apply spacing rules when the Format Document command runs."
         },
+        "markdownAutoSpace.exclude": {
+          "type": "array",
+          "default": [],
+          "scope": "resource",
+          "items": {
+            "type": "string"
+          },
+          "description": "Glob patterns for Markdown files to ignore. Patterns are relative to the containing workspace folder (including each root in a multi-root workspace); outside a workspace, they match the document path."
+        },
         "markdownAutoSpace.rules": {
           "type": "object",
           "description": "Enable or disable each space rule by code (MAS001–MAS009). All default to true. See docs/RULES.md.",

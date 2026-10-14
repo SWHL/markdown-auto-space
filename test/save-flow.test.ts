@@ -13,28 +13,31 @@ const mock = vi.hoisted(() => {
   }
   const state = {
     formatOnSave: true,
+    formatOnDocument: false,
     diagnosticsEnable: true,
+    exclude: [] as string[],
     textDocuments: [] as any[],
     applyEdit: vi.fn(async () => true),
     diagnosticSet: vi.fn(),
     diagnosticDelete: vi.fn(),
     diagnosticClear: vi.fn(),
+    formattingProvider: undefined as any,
   }
   return { events, state }
 })
 
 vi.mock('vscode', () => {
   class Range {
-    constructor(public start: any, public end: any) {}
+    constructor(public start: any, public end: any) { }
   }
   class TextEdit {
-    constructor(public range: any, public newText: string) {}
+    constructor(public range: any, public newText: string) { }
     static replace(range: any, newText: string) {
       return new TextEdit(range, newText)
     }
   }
   class Diagnostic {
-    constructor(public range: any, public message: string, public severity: number) {}
+    constructor(public range: any, public message: string, public severity: number) { }
   }
   const register = (name: keyof typeof mock.events) => (listener: any) => {
     mock.events[name].push(listener)
@@ -54,7 +57,11 @@ vi.mock('vscode', () => {
     },
     commands: { registerCommand: () => ({ dispose: vi.fn() }) },
     languages: {
-      registerDocumentFormattingEditProvider: () => ({ dispose: vi.fn() }),
+      match: () => mock.state.exclude.length ? 1 : 0,
+      registerDocumentFormattingEditProvider: (_language: string, provider: any) => {
+        mock.state.formattingProvider = provider
+        return { dispose: vi.fn() }
+      },
       createDiagnosticCollection: () => ({
         set: mock.state.diagnosticSet,
         delete: mock.state.diagnosticDelete,
@@ -64,14 +71,17 @@ vi.mock('vscode', () => {
     },
     workspace: {
       textDocuments: mock.state.textDocuments,
+      getWorkspaceFolder: () => undefined,
       getConfiguration: () => ({
         get: (key: string) => {
           if (key === 'formatOnSave')
             return mock.state.formatOnSave
           if (key === 'formatOnDocument')
-            return false
+            return mock.state.formatOnDocument
           if (key === 'diagnostics.enable')
             return mock.state.diagnosticsEnable
+          if (key === 'exclude')
+            return mock.state.exclude
           return undefined
         },
       }),
@@ -117,7 +127,9 @@ describe('save event flow', () => {
     mock.events.didOpen.length = 0
     mock.events.didChangeConfiguration.length = 0
     mock.state.formatOnSave = true
+    mock.state.formatOnDocument = false
     mock.state.diagnosticsEnable = true
+    mock.state.exclude = []
     mock.state.textDocuments.length = 0
     mock.state.applyEdit.mockClear()
     mock.state.diagnosticSet.mockClear()
@@ -183,6 +195,23 @@ describe('save event flow', () => {
       affectsConfiguration: (key: string) => key === 'markdownAutoSpace.rules',
     })
     expect(mock.state.diagnosticSet).toHaveBeenCalledWith(document.uri, expect.any(Array))
+  })
+
+  it('新增排除配置时立即删除已打开文档的诊断', () => {
+    const document = createDocument()
+    mock.state.textDocuments.push(document)
+    mock.state.exclude = ['**/*.md']
+    mock.events.didChangeConfiguration[0]!({
+      affectsConfiguration: (key: string) => key === 'markdownAutoSpace.exclude',
+    })
+    expect(mock.state.diagnosticDelete).toHaveBeenCalledWith(document.uri)
+    expect(mock.state.diagnosticSet).not.toHaveBeenCalled()
+  })
+
+  it('标准 Format Document 提供器跳过排除文档', () => {
+    mock.state.formatOnDocument = true
+    mock.state.exclude = ['**/*.md']
+    expect(mock.state.formattingProvider.provideDocumentFormattingEdits(createDocument())).toEqual([])
   })
 
   it('关闭诊断时立即清空集合', () => {

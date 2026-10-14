@@ -1,6 +1,6 @@
 // import type { TextEditorEdit } from 'vscode'
 import type { TextDocument } from 'vscode'
-import { Diagnostic, DiagnosticSeverity, Range, TextEdit, Uri, window as Window, workspace as Workspace } from 'vscode'
+import { Diagnostic, DiagnosticSeverity, languages as Languages, Range, RelativePattern, TextEdit, Uri, window as Window, workspace as Workspace } from 'vscode'
 import { getMarkdownSpaceViolations, processMarkdownContent } from './markdownSpace'
 import type { AutoSpaceConfigType } from './type'
 import { getRuleDocUrl, normalizeRules } from './type'
@@ -117,25 +117,53 @@ function getMinimalTextEdits(
 /**
  *
  */
-export function getMarkdownAutoSpaceConfig(): AutoSpaceConfigType {
-  const config = Workspace.getConfiguration('markdownAutoSpace')
+export function getMarkdownAutoSpaceConfig(document?: TextDocument): AutoSpaceConfigType {
+  const config = Workspace.getConfiguration('markdownAutoSpace', document?.uri)
   const formatOnSave = config.get('formatOnSave') as boolean
   const formatOnDocument = config.get('formatOnDocument') as boolean
+  const excludeRaw = config.get<unknown>('exclude')
+  const exclude = Array.isArray(excludeRaw)
+    ? excludeRaw.filter((pattern): pattern is string => typeof pattern === 'string')
+    : []
   const rulesRaw = config.get('rules') as Record<string, boolean> | undefined
   const rules = normalizeRules(rulesRaw)
   return {
     formatOnSave,
     formatOnDocument,
+    exclude,
     rules,
   }
 }
 
 /**
- * 仅对 Markdown 语言的文件处理
+ * Match exclusions relative to the containing workspace folder. A plain glob
+ * is used outside a workspace, where VS Code matches against the document path.
+ * RelativePattern also works for virtual workspace schemes used by VS Code Web.
  * @param document
  */
+export function isExcluded(document: TextDocument): boolean {
+  const { exclude } = getMarkdownAutoSpaceConfig(document)
+  if (!exclude.length)
+    return false
+
+  const workspaceFolder = Workspace.getWorkspaceFolder(document.uri)
+  return exclude.some((pattern) => {
+    if (!pattern.trim())
+      return false
+    try {
+      const glob = workspaceFolder ? new RelativePattern(workspaceFolder, pattern) : pattern
+      return Languages.match({ pattern: glob }, document) > 0
+    }
+    catch {
+      // Ignore malformed user patterns rather than disabling document processing.
+      return false
+    }
+  })
+}
+
+/** Only process Markdown documents that do not match an exclusion glob. */
 export function shouldProcessFile(document: TextDocument): boolean {
-  return document.languageId === 'markdown'
+  return document.languageId === 'markdown' && !isExcluded(document)
 }
 
 /**
@@ -150,7 +178,7 @@ export function getMarkdownAutoSpaceEdits(
   if (!shouldProcessFile(document))
     return undefined
 
-  const { rules } = getMarkdownAutoSpaceConfig()
+  const { rules } = getMarkdownAutoSpaceConfig(document)
   const updatedText = processMarkdownContent(text, rules)
   return getMinimalTextEdits(document, text, updatedText)
 }
@@ -159,7 +187,7 @@ export function getMarkdownAutoSpaceEdits(
 export function getMarkdownAutoSpaceChangeCount(document: TextDocument, text: string): number {
   if (!shouldProcessFile(document))
     return 0
-  const { rules } = getMarkdownAutoSpaceConfig()
+  const { rules } = getMarkdownAutoSpaceConfig(document)
   return getMinimalTextChanges(text, processMarkdownContent(text, rules)).length
 }
 
@@ -175,12 +203,12 @@ export function getMarkdownAutoSpaceDiagnostics(
 ): Diagnostic[] {
   if (!shouldProcessFile(document))
     return []
-  const config = Workspace.getConfiguration('markdownAutoSpace')
+  const config = Workspace.getConfiguration('markdownAutoSpace', document.uri)
   const diagnosticsEnabled = config.get('diagnostics.enable') as boolean | undefined
   if (diagnosticsEnabled === false)
     return []
 
-  const { rules } = getMarkdownAutoSpaceConfig()
+  const { rules } = getMarkdownAutoSpaceConfig(document)
   const violations = getMarkdownSpaceViolations(text, rules)
   const diagnostics: Diagnostic[] = []
   for (const v of violations) {
@@ -218,7 +246,7 @@ export function markdownAutoSpace(text: string) {
   if (!shouldProcessFile(document))
     return
 
-  const { rules } = getMarkdownAutoSpaceConfig()
+  const { rules } = getMarkdownAutoSpaceConfig(document)
   const updatedText = processMarkdownContent(text, rules)
   return getMinimalTextEdits(document, text, updatedText)
 }

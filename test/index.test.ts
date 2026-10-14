@@ -11,7 +11,13 @@ import {
 } from '../src/markdownSpace'
 import { DEFAULT_MARKDOWN_SPACE_RULES, MANUAL_SAVE_REASON, RULES_DOC_BASE_URL, getRuleDocUrl, normalizeRules, shouldRunFormatOnSave } from '../src/type'
 import type { MarkdownSpaceRulesType } from '../src/type'
-import { getMarkdownAutoSpaceConfig, getMarkdownAutoSpaceDiagnostics, getMarkdownAutoSpaceEdits } from '../src/utils'
+import { getMarkdownAutoSpaceConfig, getMarkdownAutoSpaceDiagnostics, getMarkdownAutoSpaceEdits, isExcluded, shouldProcessFile } from '../src/utils'
+
+const vscodeMock = vi.hoisted(() => ({
+  exclude: [] as string[],
+  workspaceFolder: undefined as { name: string, uri: { path: string } } | undefined,
+  match: vi.fn(() => 0),
+}))
 
 vi.mock('vscode', () => {
   class Range {
@@ -38,14 +44,21 @@ vi.mock('vscode', () => {
     }
   }
 
+  class RelativePattern {
+    constructor(public base: unknown, public pattern: string) { }
+  }
+
   return {
     Diagnostic: class { },
     DiagnosticSeverity: { Information: 1 },
     Range,
+    RelativePattern,
     TextEdit,
     Uri: { parse: (value: string) => value },
     window: { activeTextEditor: undefined },
+    languages: { match: vscodeMock.match },
     workspace: {
+      getWorkspaceFolder: () => vscodeMock.workspaceFolder,
       getConfiguration: () => ({
         get: (key: string) => {
           if (key === 'formatOnSave')
@@ -56,6 +69,8 @@ vi.mock('vscode', () => {
             return undefined
           if (key === 'diagnostics.enable')
             return true
+          if (key === 'exclude')
+            return vscodeMock.exclude
           return undefined
         },
       }),
@@ -67,7 +82,7 @@ vi.mock('vscode', () => {
 type CaseRow = [description: string, input: string, expected: string]
 
 /** 构造最小化的 TextDocument mock，供 utils 层单测使用。 */
-function createMockDocument(text: string, languageId = 'markdown') {
+function createMockDocument(text: string, languageId = 'markdown', uri = { scheme: 'file', path: '/workspace/docs/readme.md' }) {
   const lines = text.split('\n')
   const lineOffsets: number[] = []
   let offset = 0
@@ -78,6 +93,7 @@ function createMockDocument(text: string, languageId = 'markdown') {
 
   return {
     languageId,
+    uri,
     lineCount: lines.length,
     offsetAt(position: { line: number, character: number }) {
       return lineOffsets[position.line]! + position.character
@@ -631,11 +647,59 @@ describe('getMarkdownAutoSpaceDiagnostics', () => {
   })
 })
 
+describe('markdownAutoSpace.exclude', () => {
+  it('排除匹配同时关闭格式化编辑和诊断', () => {
+    vscodeMock.exclude = ['**/CHANGELOG.md']
+    vscodeMock.workspaceFolder = { name: 'root', uri: { path: '/workspace' } }
+    vscodeMock.match.mockReturnValue(1)
+    const document = createMockDocument('中文English', 'markdown', { scheme: 'file', path: '/workspace/docs/CHANGELOG.md' })
+
+    expect(isExcluded(document)).toBe(true)
+    expect(getMarkdownAutoSpaceEdits(document, document.getText())).toBeUndefined()
+    expect(getMarkdownAutoSpaceDiagnostics(document, document.getText())).toEqual([])
+
+    vscodeMock.exclude = []
+    vscodeMock.workspaceFolder = undefined
+    vscodeMock.match.mockReturnValue(0)
+  })
+
+  it('多根工作区和 Web URI 使用文件所属根目录的 RelativePattern', () => {
+    const webRoot = { name: 'docs', uri: { path: '/project/docs' } }
+    vscodeMock.exclude = ['**/generated/**']
+    vscodeMock.workspaceFolder = webRoot
+    vscodeMock.match.mockReturnValue(1)
+    const document = createMockDocument('中文English', 'markdown', { scheme: 'vscode-vfs', path: '/project/docs/generated/api.md' })
+
+    expect(isExcluded(document)).toBe(true)
+    expect(vscodeMock.match).toHaveBeenLastCalledWith({
+      pattern: expect.objectContaining({ base: webRoot, pattern: '**/generated/**' }),
+    }, document)
+
+    vscodeMock.exclude = []
+    vscodeMock.workspaceFolder = undefined
+    vscodeMock.match.mockReturnValue(0)
+  })
+
+  it('工作区外使用普通 glob，未匹配的非文件 URI 仍可处理', () => {
+    vscodeMock.exclude = ['**/CHANGELOG.md']
+    vscodeMock.workspaceFolder = undefined
+    vscodeMock.match.mockReturnValue(0)
+    const document = createMockDocument('中文English', 'markdown', { scheme: 'untitled', path: 'Untitled-1' })
+
+    expect(isExcluded(document)).toBe(false)
+    expect(shouldProcessFile(document)).toBe(true)
+    expect(vscodeMock.match).toHaveBeenLastCalledWith({ pattern: '**/CHANGELOG.md' }, document)
+
+    vscodeMock.exclude = []
+  })
+})
+
 describe('getMarkdownAutoSpaceConfig', () => {
   it('返回格式化文档开关，供标准 formatting provider 使用', () => {
     const config = getMarkdownAutoSpaceConfig()
     expect(config.formatOnDocument).toBe(false)
     expect(config.formatOnSave).toBe(true)
+    expect(config.exclude).toEqual([])
     expect('spaceType' in config).toBe(false)
   })
 })

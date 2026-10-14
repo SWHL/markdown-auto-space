@@ -1,5 +1,5 @@
 import * as vscode from 'vscode'
-import { getMarkdownAutoSpaceChangeCount, getMarkdownAutoSpaceConfig, getMarkdownAutoSpaceDiagnostics, getMarkdownAutoSpaceEdits } from './utils'
+import { getMarkdownAutoSpaceChangeCount, getMarkdownAutoSpaceConfig, getMarkdownAutoSpaceDiagnostics, getMarkdownAutoSpaceEdits, isExcluded, shouldProcessFile } from './utils'
 import { shouldRunFormatOnSave } from './type'
 
 let outputChannel: vscode.OutputChannel
@@ -36,8 +36,12 @@ function showStatus(message: string) {
  * @param doc
  */
 function updateDiagnostics(doc: vscode.TextDocument) {
-  if (doc.languageId !== 'markdown' || !diagnosticCollection)
+  if (!diagnosticCollection)
     return
+  if (!shouldProcessFile(doc)) {
+    diagnosticCollection.delete(doc.uri)
+    return
+  }
   const diagnostics = getMarkdownAutoSpaceDiagnostics(doc, doc.getText())
   diagnosticCollection.set(doc.uri, diagnostics)
 }
@@ -108,7 +112,8 @@ function flushDiagnosticsUpdate(doc: vscode.TextDocument) {
 function refreshDiagnosticsForConfigurationChange(event: vscode.ConfigurationChangeEvent) {
   const diagnosticsChanged = event.affectsConfiguration('markdownAutoSpace.diagnostics.enable')
   const rulesChanged = event.affectsConfiguration('markdownAutoSpace.rules')
-  if (!diagnosticsChanged && !rulesChanged)
+  const excludeChanged = event.affectsConfiguration('markdownAutoSpace.exclude')
+  if (!diagnosticsChanged && !rulesChanged && !excludeChanged)
     return
 
   const diagnosticsEnabled = vscode.workspace
@@ -151,8 +156,14 @@ export function activate(context: vscode.ExtensionContext) {
     const document = editor.document
     log(`  Document: ${document.uri.fsPath} languageId=${document.languageId}`)
     if (!shouldProcessFile(document)) {
-      log('  Skipped: current file is not Markdown')
-      void vscode.window.showWarningMessage(`Markdown Auto Space: Markdown files only (current language: ${document.languageId}).`)
+      if (document.languageId === 'markdown' && isExcluded(document)) {
+        log('  Skipped: current file is excluded')
+        showStatus('Markdown Auto Space: Skipped excluded file.')
+      }
+      else {
+        log('  Skipped: current file is not Markdown')
+        void vscode.window.showWarningMessage(`Markdown Auto Space: Markdown files only (current language: ${document.languageId}).`)
+      }
       return
     }
 
@@ -178,7 +189,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(
     vscode.workspace.onWillSaveTextDocument((event) => {
-      const { formatOnSave } = getMarkdownAutoSpaceConfig()
+      const { formatOnSave } = getMarkdownAutoSpaceConfig(event.document)
       const runFormat = shouldRunFormatOnSave(event.reason)
       log(`onWillSave: ${event.document.uri.fsPath} formatOnSave=${formatOnSave} reason=${event.reason} runFormat=${runFormat}`)
       if (formatOnSave && runFormat)
@@ -188,7 +199,7 @@ export function activate(context: vscode.ExtensionContext) {
   // 监听格式化文档命令
   const formattingProvider = vscode.languages.registerDocumentFormattingEditProvider('markdown', {
     provideDocumentFormattingEdits: (document) => {
-      const { formatOnDocument } = getMarkdownAutoSpaceConfig()
+      const { formatOnDocument } = getMarkdownAutoSpaceConfig(document)
       if (!formatOnDocument)
         return []
 
@@ -235,12 +246,4 @@ export function deactivate() {
   for (const timer of diagnosticsDebounceTimers.values())
     clearTimeout(timer)
   diagnosticsDebounceTimers.clear()
-}
-
-/**
- * 仅对 Markdown 语言的文件处理
- * @param document
- */
-function shouldProcessFile(document: vscode.TextDocument) {
-  return document.languageId === 'markdown'
 }

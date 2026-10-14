@@ -35,6 +35,7 @@ Format Chinese-English spacing in Markdown for VS Code.
 - 支持 **Format Document**，也可在手动保存时自动格式化全文
 - 支持 **诊断提示（squiggles）**，像 markdownlint 一样直接标出问题位置
 - 支持 **9 条可单独开关的规则（MAS001–MAS009）**
+- 支持按 glob 排除生成文档、CHANGELOG 或特定目录
 - 使用最小范围编辑，只提交实际发生变化的文本区间
 - 支持 **VS Code Desktop** 和 **VS Code for the Web**（`vscode.dev`、`github.dev`）
 
@@ -122,6 +123,7 @@ code --install-extension SWHL.markdown-auto-space
 | `markdownAutoSpace.diagnostics.enable` | `true` | 显示规则提示波浪线 |
 | `markdownAutoSpace.formatOnSave` | `true` | 手动保存 Markdown 时自动修正 |
 | `markdownAutoSpace.formatOnDocument` | `false` | 执行 Format Document 时修正 |
+| `markdownAutoSpace.exclude` | `[]` | 在所有格式化、命令和诊断中排除匹配的文件 |
 | `markdownAutoSpace.rules` | 全部开启 | 按规则码单独开关 MAS001–MAS009 |
 
 例如关闭部分规则：
@@ -135,9 +137,23 @@ code --install-extension SWHL.markdown-auto-space
 }
 ```
 
+例如排除所有工作区根目录下的 `CHANGELOG.md` 和 `generated` 目录：
+
+```json
+{
+  "markdownAutoSpace.exclude": [
+    "**/CHANGELOG.md",
+    "**/generated/**"
+  ]
+}
+```
+
+排除项使用 VS Code glob 语法，并同时作用于手动保存格式化、`Markdown Auto Space: Format Document` 命令、标准 Format Document 提供器和诊断。工作区内的路径相对文件所属的工作区根目录匹配；多根工作区会分别以各自根目录为基准，因此同一模式对每个根一致生效。工作区外的文档按完整文档路径匹配。VS Code Web 的虚拟工作区 URI 同样以所属工作区根为基准；不属于任何工作区的非文件 URI 通常只会在其 URI 路径匹配模式时被排除。
+
 ## Behavior details
 
 - 仅在语言 ID 为 `markdown` 的文件中生效
+- `markdownAutoSpace.exclude` 命中的文档不会被格式化，也不会产生诊断
 - 自动保存、失焦保存不会触发 `formatOnSave`
 - 保存时只返回实际变化位置的编辑，不会全文替换文档；未变化文本、光标 / 选区和换行格式会尽量保持稳定
 - 支持 LF, CRLF 以及同一文档中的混合换行格式，不会为了格式化空格改写换行符
