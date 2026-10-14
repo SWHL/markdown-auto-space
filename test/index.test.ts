@@ -233,6 +233,21 @@ const PROCESS_MARKDOWN_CASES: CaseRow[] = [
   ['缩进代码块行不处理', '普通行\n    const a = "中文"\n后续', '普通行\n    const a = "中文"\n后续'],
   ['tab 缩进代码行不处理', '文本\n\tprint("hello世界")', '文本\n\tprint("hello世界")'],
   ['链接+title 引号内不处理', '这是一个链接[Markdown语法](https://markdown.com.cn "最好的markdown教程")。', '这是一个链接 [Markdown 语法](https://markdown.com.cn "最好的markdown教程")。'],
+  ['引用块中的中英文', '> 引用中文English', '> 引用中文 English'],
+  ['嵌套列表中的中英文', '  - > 嵌套中文English', '  - > 嵌套中文 English'],
+  ['表格单元格中的中英文', '| 名称 | value中文 |', '| 名称 | value 中文 |'],
+  ['引用式链接文本', '[查看RapidOCR文档][docs]', '[查看 RapidOCR 文档][docs]'],
+  ['引用式链接定义保持不变', '[docs]: https://example.com "中文English"', '[docs]: https://example.com "中文English"'],
+  ['自动链接边界', '访问<https://example.com>项目', '访问 <https://example.com> 项目'],
+  ['多行 HTML 块保持内容不变', '<div>\n中文English\n</div>\n后续中文English', '<div>\n中文English\n</div>\n后续中文 English'],
+  ['嵌套 HTML 块保持内容不变', '<div>\n<div>\n内部中文English\n</div>\n外层中文English\n</div>\n后续中文English', '<div>\n<div>\n内部中文English\n</div>\n外层中文English\n</div>\n后续中文 English'],
+  ['未闭合行内代码保守处理', '中文`code English', '中文`code English'],
+  ['未闭合链接保守处理', '[中文English', '[中文English'],
+  ['未闭合引号保守处理', '说明"中文English', '说明"中文English'],
+  ['JSX 属性和表达式保持不变', '<Component label="中文English" value={中文English} />文本English', '<Component label="中文English" value={中文English} /> 文本 English'],
+  ['模板表达式保持不变', '显示{{中文English}}后续English', '显示 {{中文English}} 后续 English'],
+  ['转义反引号不作为行内代码', '中文\\`English中文', '中文\\`English 中文'],
+  ['英文撇号不误判为未闭合引号', 'don\'t中文English', 'don\'t 中文 English'],
 ]
 
 /** 占位符字面量：文档中含 __PROTECTED_数字__ 且索引越界时不应报错，原样保留（修复 restoreOnePass 中 item 为 undefined 导致 .match 报错） */
@@ -460,6 +475,13 @@ describe('getLineViolations', () => {
     const v = getLineViolations('使用`10Gbps`测试', allOn)
     expect(v.filter(x => x.code === 'MAS007')).toHaveLength(0)
   })
+  it('MDX 和模板表达式内不报规则违规', () => {
+    expect(getLineViolations('<Component value={中文10Gbps} />', allOn)).toHaveLength(0)
+    expect(getLineViolations('显示{{中文10Gbps}}', allOn).filter(x => x.code === 'MAS007')).toHaveLength(0)
+  })
+  it('引用式链接文本中的单位参与诊断', () => {
+    expect(getLineViolations('[网速10Gbps][docs]', allOn).some(x => x.code === 'MAS007')).toBe(true)
+  })
   it('关闭 MAS007 时不报 MAS007', () => {
     const v = getLineViolations('正文10Gbps', { ...allOn, digitUnitSpace: false })
     expect(v.filter(x => x.code === 'MAS007')).toHaveLength(0)
@@ -489,6 +511,11 @@ describe('getMarkdownSpaceViolations', () => {
     const v = getMarkdownSpaceViolations(content, DEFAULT_MARKDOWN_SPACE_RULES)
     const mas007 = v.filter(x => x.code === 'MAS007')
     expect(mas007.every(x => x.lineIndex === 3)).toBe(true)
+  })
+  it('多行 HTML、JSX 和模板块不扫描', () => {
+    const content = '<div>\n中文10Gbps\n</div>\n<Component>\n中文10Gbps\n</Component>\n{{\n中文10Gbps\n}}\n正文10Gbps'
+    const v = getMarkdownSpaceViolations(content, DEFAULT_MARKDOWN_SPACE_RULES)
+    expect(v.filter(x => x.code === 'MAS007').map(x => x.lineIndex)).toEqual([9])
   })
 })
 

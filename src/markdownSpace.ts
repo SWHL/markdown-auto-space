@@ -180,15 +180,23 @@ function mergeRanges(ranges: [number, number][]): [number, number][] {
  */
 function collectProtectedRanges(line: string, protectLinks = true): [number, number][] {
   const patterns = [
+    /\\[!"#$%&'()*+,\-./:;<=>?@[\]^_`{|}~]/g,
     /(`+)([\s\S]*?)\1/g,
     /!\[[^\]]*\]\([^)]+\)/g,
     ...(protectLinks ? [/\[([^\]]+)\]\(([^)]+)\)/g] : []),
+    ...(protectLinks ? [/\[[^\]\n]+\]\s*\[[^\]\n]*\]/g] : []),
+    /<(?:https?:\/\/|mailto:)[^>\n]+>/g,
     /<\/?[a-zA-Z][^>]*>/g,
     /<!--[\s\S]*?-->/g,
     /https?:\/\/[a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=%]+/g,
+    /\$\{(?:[^{}]|\{[^{}]*\})*\}/g,
+    /\{\{(?:[^{}]|\{[^{}]*\})*\}\}/g,
     /"[^"]*"/g,
     /'[^']*'/g,
     /\*\*[^*]+\*\*/g,
+    /(`+)[\s\S]*$/g,
+    /\[[^\]\n]*$/g,
+    /(?:"[^"\n]*|(?<![A-Za-z])'[^'\n]*)$/g,
   ]
   const ranges: [number, number][] = []
   for (const re of patterns) {
@@ -200,15 +208,46 @@ function collectProtectedRanges(line: string, protectLinks = true): [number, num
   return mergeRanges(ranges)
 }
 
+/** Protect Markdown/MDX constructs whose closing delimiter may be absent. */
+function protectUnclosedStructures(text: string, saveItem: (match: string, opaque?: boolean) => string): string {
+  let result = text
+  // Reference links and autolinks are complete constructs, but are not handled
+  // by the inline-link matcher below.
+  result = result.replace(/!?\[[^\]\n]+\]\s*\[[^\]\n]*\]/g, saveItem)
+  result = result.replace(/<(?:https?:\/\/|mailto:)[^>\n]+>/g, saveItem)
+  // MDX/JSX expressions are opaque to a prose formatter. A balanced expression
+  // is protected first; an unterminated expression is protected to EOL.
+  result = result.replace(/\$\{(?:[^{}]|\{[^{}]*\})*\}/g, saveItem)
+  result = result.replace(/\$\{[^{}]*$/g, saveItem)
+  result = result.replace(/\{\{(?:[^{}]|\{[^{}]*\})*\}\}/g, saveItem)
+  result = result.replace(/\{\{[^{}]*$/g, saveItem)
+  // Be conservative with malformed inline constructs: changing their contents
+  // is worse than leaving the remainder of the line untouched.
+  result = result.replace(/(`+)[\s\S]*$/g, (full, marker: string) => {
+    let count = 0
+    let offset = 0
+    while ((offset = full.indexOf(marker, offset)) >= 0) {
+      count++
+      offset += marker.length
+    }
+    return count >= 2 ? full : saveItem(full, true)
+  })
+  result = result.replace(/\[[^\]\n]*$/g, match => saveItem(match, true))
+  result = result.replace(/(?:"[^"\n]*|(?<![A-Za-z])'[^'\n]*)$/g, match => saveItem(match, true))
+  return result
+}
+
 function collectLinkTextRanges(line: string): [number, number][] {
   const ranges: [number, number][] = []
-  const re = /!?\[([^\]]+)\]\([^)]+\)/g
-  let match: RegExpExecArray | null
-  while ((match = re.exec(line)) !== null) {
-    if (match[0].startsWith('!'))
-      continue
-    const start = match.index + 1
-    ranges.push([start, start + match[1]!.length])
+  const patterns = [/!?\[([^\]]+)\]\([^)]+\)/g, /!?\[([^\]]+)\]\s*\[[^\]]*\]/g]
+  for (const re of patterns) {
+    let match: RegExpExecArray | null
+    while ((match = re.exec(line)) !== null) {
+      if (match[0].startsWith('!'))
+        continue
+      const start = match.index + 1
+      ranges.push([start, start + match[1]!.length])
+    }
   }
   return ranges
 }
@@ -408,12 +447,18 @@ export function addSpacesBetweenChineseAndAlnum(
    *
    * @param match
    */
-  function saveItem(match: string): string {
+  function saveItem(match: string, opaque = false): string {
     protectedItems.push(match)
-    return `${PROTECTED_PLACEHOLDER}${protectedItems.length - 1}__`
+    return opaque === true
+      ? `__OPAQUE_${protectedItems.length - 1}__`
+      : `${PROTECTED_PLACEHOLDER}${protectedItems.length - 1}__`
   }
 
   let result = text
+
+  // Escaped punctuation is literal Markdown text and must not open another
+  // construct (notably an escaped backtick or bracket).
+  result = result.replace(/\\[!"#$%&'()*+,\-./:;<=>?@[\]^_`{|}~]/g, match => saveItem(match, true))
 
   // 1. 保护反引号包裹的 inline code（最高优先级，内部可为任意内容）
   result = result.replace(/(`+)([\s\S]*?)\1/g, saveItem)
@@ -436,6 +481,13 @@ export function addSpacesBetweenChineseAndAlnum(
 
   // 7. 保护 **粗体**
   result = result.replace(/\*\*[^*]+\*\*/g, saveItem)
+
+  // 8. 保护引用式链接、自动链接、MDX/JSX 表达式及未闭合结构
+  result = protectUnclosedStructures(result, saveItem)
+
+  // Normalize block quote/list markers even when the source omitted the
+  // optional Markdown whitespace. This is structural whitespace, not prose.
+  result = result.replace(/^(\s*(?:(?:[-+*]|\d+[.)])\s*)?>)\s*(?=[\u4e00-\u9fff])/u, '$1 ')
 
   if (options.dunhaoToComma) {
     result = result.replace(
@@ -497,7 +549,7 @@ export function addSpacesBetweenChineseAndAlnum(
   if (options.noSpaceAroundCjkPunct)
     result = applyNoSpaceAroundCjkPunct(result)
 
-  const placeholderRegex = new RegExp(`${PROTECTED_PLACEHOLDER}(\\d+)__`, 'g')
+  const placeholderRegex = new RegExp(`(?:${PROTECTED_PLACEHOLDER}|__OPAQUE_)(\\d+)__`, 'g')
   /**
    *
    * @param input
@@ -509,9 +561,13 @@ export function addSpacesBetweenChineseAndAlnum(
       if (item === undefined)
         return fullMatch
       const linkMatch = item.match(/^\[([^\]]+)\]\(([^)]+)\)$/)
+      const referenceMatch = item.match(/^\[([^\]]+)\](\s*\[[^\]]*\])$/)
       if (linkMatch && !linkMatch[1].startsWith('!')) {
         const [, linkText, linkUrl] = linkMatch
         item = `[${applyLinkTextPostRules(linkText, options, units)}](${linkUrl})`
+      }
+      else if (referenceMatch && !referenceMatch[1].startsWith('!')) {
+        item = `[${applyLinkTextPostRules(referenceMatch[1], options, units)}]${referenceMatch[2]}`
       }
       return item
     })
@@ -631,6 +687,9 @@ function getLineProcessingInfo(
   let inYamlFrontMatter = isYamlDelimiter(lines[0] ?? '')
   const disabled = new Set<keyof MarkdownSpaceRulesType>()
   let nextLineDirective: LocalIgnoreDirective | null = null
+  const htmlBlockTags: string[] = []
+  let inHtmlComment = false
+  let templateCloser: '}' | '}}' | null = null
 
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
     const line = lines[lineIndex]!
@@ -647,11 +706,80 @@ function getLineProcessingInfo(
       nextLineDirective = null
       continue
     }
+    // Reference-link definitions are syntax, not prose. Keep their labels,
+    // destinations and optional titles byte-for-byte intact.
+    if (/^\s*\[[^\]]+\]:/.test(line)) {
+      skippedLineIndices.add(lineIndex)
+      nextLineDirective = null
+      continue
+    }
     if (codeFence !== null) {
       skippedLineIndices.add(lineIndex)
       nextLineDirective = null
       if (closesFence(line, codeFence))
         codeFence = null
+      continue
+    }
+
+    // HTML blocks (including multiline comments) are opaque. This also covers
+    // JSX/MDX tags with lowercase HTML-like block names without touching prose
+    // on surrounding lines.
+    if (inHtmlComment) {
+      skippedLineIndices.add(lineIndex)
+      if (line.includes('-->'))
+        inHtmlComment = false
+      continue
+    }
+    if (htmlBlockTags.length > 0) {
+      skippedLineIndices.add(lineIndex)
+      const tags = /<\/?([a-z][a-z0-9-]*)\b[^>]*>/gi
+      let tagMatch: RegExpExecArray | null
+      while ((tagMatch = tags.exec(line)) !== null) {
+        const tag = tagMatch[1]!.toLowerCase()
+        if (tagMatch[0]!.startsWith('</')) {
+          const last = htmlBlockTags[htmlBlockTags.length - 1]
+          if (last === tag)
+            htmlBlockTags.pop()
+        }
+        else if (!/\/\s*>$/.test(tagMatch[0]!)) {
+          htmlBlockTags.push(tag)
+        }
+      }
+      continue
+    }
+    if (templateCloser !== null) {
+      skippedLineIndices.add(lineIndex)
+      if (line.includes(templateCloser))
+        templateCloser = null
+      continue
+    }
+    if (line.includes('<!--') && !line.includes('-->')) {
+      skippedLineIndices.add(lineIndex)
+      inHtmlComment = true
+      continue
+    }
+    const htmlBlockOpening = /<([a-z][a-z0-9-]*)\b[^>]*>/i.exec(line)
+    if (htmlBlockOpening && !/\/\s*>$/.test(htmlBlockOpening[0])) {
+      const tag = htmlBlockOpening[1]!
+      if (/^[A-Z]/.test(tag) || /^(address|article|aside|blockquote|details|dialog|div|fieldset|figcaption|figure|footer|form|h[1-6]|header|main|nav|ol|p|pre|script|section|style|table|tbody|td|tfoot|th|thead|tr|ul)$/.test(tag.toLowerCase())) {
+        const close = new RegExp(`</${tag}\\s*>`, 'i')
+        if (!close.test(line.slice(htmlBlockOpening.index + htmlBlockOpening[0].length))) {
+          skippedLineIndices.add(lineIndex)
+          htmlBlockTags.push(tag.toLowerCase())
+          continue
+        }
+      }
+    }
+    const doubleTemplateStart = line.indexOf('{{')
+    const singleTemplateStart = line.indexOf('${')
+    if (doubleTemplateStart >= 0 && line.indexOf('}}', doubleTemplateStart + 2) < 0) {
+      skippedLineIndices.add(lineIndex)
+      templateCloser = '}}'
+      continue
+    }
+    if (singleTemplateStart >= 0 && line.indexOf('}', singleTemplateStart + 2) < 0) {
+      skippedLineIndices.add(lineIndex)
+      templateCloser = '}'
       continue
     }
 

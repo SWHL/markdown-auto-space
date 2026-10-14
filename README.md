@@ -182,6 +182,10 @@ code --install-extension SWHL.markdown-auto-space
 - 忽略指令支持较短的 `mas-disable`、`mas-enable` 和 `mas-disable-next-line` 写法；在指令中输入规则码时可获得 VS Code 补全，悬停规则码可查看说明、示例和完整文档链接
 - 输入 `<!-- mas-` 或 `<!-- markdown-auto-space-` 时会自动提示可用指令，选择后可继续获得规则码提示
 - 补全和悬停仅在完整的独占一行忽略注释中生效，普通正文或其他 HTML 注释中的 `MASxxx` 不会触发规则提示
+- Markdown 结构兼容性：引用块、嵌套列表和表格单元格中的正文会正常处理；引用式链接 `[文档][id]` 与自动链接 `<https://example.com>` 会保护语法并处理链接边界，引用定义行保持不变
+- 支持跨行 HTML/HTML 注释、常见 JSX/MDX 块以及 `{{template}}` / `${expression}` 表达式保护；这些结构内部不会被格式化
+- 转义 Markdown 标点（例如 `\``、`\[`）按字面文本处理；未闭合的行内代码、链接、引号和模板表达式采用保守策略，避免破坏原文
+- 复杂 Markdown 语法当前使用轻量状态扫描和局部保护，不引入 Markdown AST 运行时依赖，以保持 Web 扩展包体积和单行处理性能
 
 ## Rule docs
 

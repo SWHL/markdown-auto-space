@@ -33,6 +33,10 @@
 
 在 VS Code 中开启 `markdownAutoSpace.diagnostics.enable` 后，违反上述规则的位置会显示波浪线，悬停可看到规则码与说明。修改 `markdownAutoSpace.rules` 或 `markdownAutoSpace.units` 后，已打开文档的诊断会立即刷新。
 
+## Markdown 语法兼容性
+
+格式化器会先识别 Markdown 结构，再处理可见文本，因此以下场景不会把语法内容误当成普通正文：引用块、嵌套列表、表格单元格、引用式链接、自动链接、多行 HTML/HTML 注释、常见 JSX/MDX 块、模板表达式以及反斜杠转义字符。未闭合的行内代码、链接、引号或模板表达式采用保守策略；引用定义行和完整 HTML/JSX/模板块保持原文不变。当前实现使用轻量状态扫描，不增加 Markdown AST 生产依赖，以控制 VS Code Web 扩展体积和运行时开销。
+
 ## 代码块保护
 
 格式化和诊断会跳过 Markdown 围栏代码块。支持反引号和波浪线围栏，围栏长度至少为 3 个字符，也支持围栏后的语言标识以及最多 3 个空格的缩进：
