@@ -146,6 +146,10 @@ export function getMarkdownAutoSpaceConfig(document?: TextDocument): AutoSpaceCo
       ...(Array.isArray(unitsRaw?.include) ? unitsRaw.include : []),
     ].filter((unit): unit is string => typeof unit === 'string'),
     exclude: Array.isArray(unitsRaw?.exclude) ? unitsRaw.exclude.filter((unit): unit is string => typeof unit === 'string') : [],
+    caseSensitive: unitsRaw?.caseSensitive !== false,
+    protectedModels: Array.isArray(unitsRaw?.protectedModels)
+      ? unitsRaw.protectedModels.filter((model): model is string => typeof model === 'string')
+      : [],
   }
   return {
     fileExtensions,

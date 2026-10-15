@@ -11,18 +11,21 @@ const PROTECTED_PLACEHOLDER = '__PROTECTED_'
 /** 数字与单位：按长度降序，避免复合单位被拆成短单位。 */
 const DEFAULT_DIGIT_UNIT_SUFFIXES = [
   'Gbps', 'Mbps', 'Kbps', 'TiB', 'GiB', 'MiB', 'KiB', 'THz', 'GHz', 'MHz', 'kHz',
-  'MB/s', 'GB/s', 'KB/s', 'Gb/s', 'm/s', 'km/h', 'mAh', 'kWh', 'Wh', 'kW', 'MW',
+  'MB/s', 'GB/s', 'KB/s', 'Gb/s', 'm/s', 'm/s²', 'km/h', 'kg·m/s²', 'N·m', 'W·h', 'mAh', 'kWh', 'Wh', 'kW', 'MW',
   '°C', '°F', 'dpi', 'bps', 'TB', 'GB', 'MB', 'KB', 'Hz', 'ms', 'ns', 'ps', 'px',
   'kPa', 'MPa', 'Pa', 'kJ', 'MJ', 'J', 'kcal', 'cal', 'kN', 'N', 'lm', 'lx', 'ppm', 'ppb',
   'μm', 'nm', 'mm', 'cm', 'km', 'm', 'mg', 'kg', 'g', 't', 'mL', 'dL', 'L', 'mol',
   'min', 'h', 's', 'rad', 'mΩ', 'Ω', 'A', 'V', 'W',
-  '公里', '厘米', '毫米', '米', '公斤', '千克', '克', '吨', '升', '毫升', '秒', '分钟', '小时',
+  '公里', '厘米', '毫米', '微米', '纳米', '米', '公斤', '千克', '毫克', '克', '吨', '升', '毫升', '秒', '分钟', '小时',
+  '瓦', '千瓦', '伏', '安', '帕', '焦耳', '牛', '开尔文', '亩', '海里', '节',
 ] as const
 
 export interface DigitUnitOptions {
   additional?: unknown
   include?: unknown
   exclude?: unknown
+  caseSensitive?: boolean
+  protectedModels?: unknown
 }
 
 const digitUnitRegexCache = new Map<string, RegExp>()
@@ -36,6 +39,20 @@ function normalizeUnitValues(value: unknown): string[] {
     .filter(unit => unit.length > 0 && unit.length <= 32 && !/\s/u.test(unit)))]
 }
 
+function overlapsProtectedModel(text: string, start: number, end: number, options: DigitUnitOptions): boolean {
+  const models = normalizeUnitValues(options.protectedModels)
+  return models.some(model => {
+    let offset = text.indexOf(model)
+    while (offset >= 0) {
+      const modelEnd = offset + model.length
+      if (offset < end && modelEnd > start)
+        return true
+      offset = text.indexOf(model, offset + 1)
+    }
+    return false
+  })
+}
+
 function getDigitUnitRegex(options: DigitUnitOptions = {}): RegExp {
   const objectOptions = options as object
   const objectCached = digitUnitRegexObjectCache.get(objectOptions)
@@ -45,11 +62,13 @@ function getDigitUnitRegex(options: DigitUnitOptions = {}): RegExp {
     ...normalizeUnitValues(options.additional),
     ...normalizeUnitValues(options.include),
   ])
-  const excluded = new Set(normalizeUnitValues(options.exclude))
+  const caseSensitive = options.caseSensitive !== false
+  const normalizeKey = (value: string) => caseSensitive ? value : value.toLocaleLowerCase()
+  const excluded = new Set(normalizeUnitValues(options.exclude).map(normalizeKey))
   const units = [...new Set([...DEFAULT_DIGIT_UNIT_SUFFIXES, ...additional])]
-    .filter(unit => !excluded.has(unit))
+    .filter(unit => !excluded.has(normalizeKey(unit)))
     .sort((a, b) => b.length - a.length || a.localeCompare(b))
-  const key = units.join('\u0000')
+  const key = `${caseSensitive ? 's' : 'i'}\u0001${units.join('\u0000')}`
   const cached = digitUnitRegexCache.get(key)
   if (cached) {
     digitUnitRegexObjectCache.set(objectOptions, cached)
@@ -58,13 +77,13 @@ function getDigitUnitRegex(options: DigitUnitOptions = {}): RegExp {
   const escaped = units.map(unit => unit.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
   let regex = escaped.length === 0
     ? /(?!) /gu
-    : new RegExp(`(?<![A-Za-z0-9_])(\\d+(?:\\.\\d+)?)(${escaped.join('|')})(?![A-Za-z0-9])`, 'gu')
+    : new RegExp(`(?<![A-Za-z0-9_])(\\d+(?:\\.\\d+)?)(${escaped.join('|')})(?![A-Za-z0-9])`, `gu${caseSensitive ? '' : 'i'}`)
   const slash = String.fromCharCode(92)
   const digit = `${slash}d`
   const number = `-?(?:(?:${digit}{1,3}(?:,${digit}{3})+)|${digit}+)(?:${slash}.${digit}+)?`
   regex = escaped.length === 0
     ? /(?!) /gu
-    : new RegExp(`(?<![A-Za-z0-9_.,])(${number}(?:${slash}s*[~-]${slash}s*${number})?)(${escaped.join('|')})(?![A-Za-z0-9./])`, 'gu')
+    : new RegExp(`(?<![A-Za-z0-9_.,])(${number}(?:${slash}s*[~-]${slash}s*${number})?)(${escaped.join('|')})(?![A-Za-z0-9./])`, `gu${caseSensitive ? '' : 'i'}`)
   digitUnitRegexCache.set(key, regex)
   digitUnitRegexObjectCache.set(objectOptions, regex)
   return regex
@@ -75,7 +94,19 @@ function getDigitUnitRegex(options: DigitUnitOptions = {}): RegExp {
  * @param text
  */
 export function applyDigitUnitSpace(text: string, options: DigitUnitOptions = {}): string {
-  return text.replace(getDigitUnitRegex(options), '$1 $2')
+  const protectedModels = normalizeUnitValues(options.protectedModels)
+  if (protectedModels.length === 0)
+    return text.replace(getDigitUnitRegex(options), '$1 $2')
+  const placeholders: string[] = []
+  const escapedModels = protectedModels.sort((a, b) => b.length - a.length)
+    .map(model => model.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+  const modelRegex = new RegExp(escapedModels.join('|'), 'gu')
+  const masked = text.replace(modelRegex, model => {
+    placeholders.push(model)
+    return `__MAS007_MODEL_${placeholders.length - 1}__`
+  })
+  const result = masked.replace(getDigitUnitRegex(options), '$1 $2')
+  return result.replace(/__MAS007_MODEL_(\d+)__/g, (_, index: string) => placeholders[Number(index)] ?? '')
 }
 
 /**
@@ -349,7 +380,8 @@ export function getLineViolations(
       const start = match.index + num.length
       const end = start + (match[2]!.length)
       const inLinkText = linkTextRanges.some(([start, finish]) => match.index >= start && end <= finish)
-      if (!rangeOverlaps(nonLinkProtectedRanges, match.index, end)
+      if (!overlapsProtectedModel(line, match.index, end, units)
+        && !rangeOverlaps(nonLinkProtectedRanges, match.index, end)
         && (!rangeOverlaps(protectedRanges, match.index, end) || inLinkText))
         pushUnique(start > 0 ? start - 1 : start, Math.min(2, line.length - (start > 0 ? start - 1 : start)), 'digitUnitSpace')
     }

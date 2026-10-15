@@ -185,18 +185,22 @@ VS Code 的标准 `Format Document` 是另一条路径。默认不会注册本�
 
 上例会在保守预设基础上重新开启 MAS005，并关闭 MAS001；切换 preset 后诊断和格式化结果会立即更新。
 
-例如追加领域单位，或排除会与产品型号冲突的默认单位：
+例如追加领域单位，配置大小写策略，或排除会与产品型号冲突的默认单位：
 
 ```json
 {
   "markdownAutoSpace.units": {
     "additional": ["rpm", "kWh", "μm"],
-    "exclude": ["V"]
+    "exclude": ["V"],
+    "caseSensitive": true,
+    "protectedModels": ["Python3", "X100"]
   }
 }
 ```
 
-非法、空白或重复单位会被忽略；单位会安全转义后用于匹配。自定义单位同时用于正文、超链接文本的格式化和 MAS007 诊断。`additional` 与 `include` 中的单位会合并；也可只使用 `include` 作为 `additional` 的别名。
+非法、空白或重复单位会被忽略；单位会安全转义后用于匹配。`caseSensitive` 默认为 `true`，设为 `false` 时 `gbps` 与 `Gbps` 等 ASCII 字母大小写等价。`protectedModels` 中的产品型号会整体保护。自定义单位、大小写策略和型号名单同时用于正文、超链接文本的格式化和 MAS007 诊断。`additional` 与 `include` 中的单位会合并；也可只使用 `include` 作为 `additional` 的别名。
+
+单位配置暂不拆分为独立文件：选项规模较小，并且 VS Code 设置能直接提供用户、工作区和语言级覆盖及即时诊断刷新；未来若需要大规模领域词典，再评估外部词典方案。
 
 例如排除所有工作区根目录下的 `CHANGELOG.md` 和 `generated` 目录：
 

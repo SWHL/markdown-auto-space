@@ -267,20 +267,24 @@
 
 **边界约定**：`°C`/`°F` 是温度单位，规范化为 `25 °C`；裸角度 `25°` 仍由 MAS008 保持紧凑。`4K`、`1080p` 等习惯连写、版本号（如 `v3.6.0`）、产品型号（如 `Python3`）和路径（如 `release/v3.0`）不会误拆。复合单位只在数字与整体单位之间加空格，不会把 `/` 两侧拆开。
 
-可通过 `markdownAutoSpace.units` 扩展单位，而无需复制默认列表：
+可通过 `markdownAutoSpace.units` 扩展单位，而无需复制默认列表。复合单位（如 `kg·m/s²`、`N·m`）按整体匹配，中文和领域单位也可直接加入：
 
 ```json
 {
   "markdownAutoSpace.units": {
     "additional": ["rpm", "kWh", "μm"],
-    "exclude": ["V"]
+    "exclude": ["V"],
+    "caseSensitive": true,
+    "protectedModels": ["Python3", "X100"]
   }
 }
 ```
 
-`additional` 和 `include` 中的单位会合并追加，`exclude` 会从默认及追加列表中移除单位。非法、空白和重复值会忽略；单位会转义后再构造并缓存正则。配置同时影响正文和超链接文本的格式化及 MAS007 诊断。图片说明、行内代码和链接地址仍受保护。
+`additional` 和 `include` 中的单位会合并追加，`exclude` 会从默认及追加列表中移除单位。`caseSensitive` 默认为 `true`；设为 `false` 后单位匹配不区分 ASCII 字母大小写。`protectedModels` 用于明确列出不应拆分的产品型号。非法、空白和重复值会忽略；单位会转义后再构造并缓存正则。配置同时影响正文和超链接文本的格式化及 MAS007 诊断。图片说明、行内代码和链接地址仍受保护。
 
 配置键：`markdownAutoSpace.rules.MAS007`，默认 `true`。
+
+**配置文件评估**：当前单位表扩展、大小写策略和型号保护名单均属于 MAS007 的轻量选项，且需要随 VS Code 工作区配置即时刷新，因此暂不引入独立单位配置文件；继续使用 `markdownAutoSpace.units` 可复用现有的用户/工作区/语言覆盖机制。只有当单位词条需要大规模共享、版本化或按领域分发时，才考虑拆分外部词典。
 
 ---
 

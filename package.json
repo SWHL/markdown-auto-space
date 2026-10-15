@@ -186,7 +186,9 @@
           "type": "object",
           "default": {
             "additional": [],
-            "exclude": []
+            "exclude": [],
+            "caseSensitive": true,
+            "protectedModels": []
           },
           "description": "Customize MAS007 units. Additional units are appended to defaults; excluded units are removed.",
           "properties": {
@@ -210,6 +212,17 @@
                 "type": "string"
               },
               "default": []
+            },
+            "caseSensitive": {
+              "type": "boolean",
+              "default": true,
+              "description": "Treat unit letters as case-sensitive when matching MAS007."
+            },
+            "protectedModels": {
+              "type": "array",
+              "items": { "type": "string" },
+              "default": [],
+              "description": "Product/model tokens that MAS007 must leave unchanged."
             }
           }
         }

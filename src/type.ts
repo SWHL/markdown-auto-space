@@ -16,7 +16,11 @@ export interface MarkdownSpaceRulesType {
 
 export interface DigitUnitConfig {
   additional: string[]
+  /** Whether unit matching distinguishes ASCII letter case. Defaults to true. */
+  caseSensitive?: boolean
   exclude: string[]
+  /** Product/model tokens that must never be split by MAS007. */
+  protectedModels?: string[]
 }
 
 export type MarkdownAutoSpacePreset = 'default' | 'conservative' | 'strict' | 'custom'

@@ -438,6 +438,17 @@ describe('applyDigitUnitSpace', () => {
     expect(applyDigitUnitSpace('assets/10GB/file、assets/10m/s/file')).toBe('assets/10GB/file、assets/10m/s/file')
     expect(applyDigitUnitSpace('12,34KB、1.2.3m、v1.2.3m')).toBe('12,34KB、1.2.3m、v1.2.3m')
   })
+  it('支持大小写不敏感单位匹配和显式型号保护名单', () => {
+    expect(applyDigitUnitSpace('速度10gbps和容量20TB', { caseSensitive: false })).toBe('速度10 gbps和容量20 TB')
+    expect(applyDigitUnitSpace('设备X10、芯片A100和速度10GB', { protectedModels: ['X10', 'A100'] })).toBe('设备X10、芯片A100和速度10 GB')
+  })
+  it('覆盖复合、中文和领域单位', () => {
+    expect(applyDigitUnitSpace('力10N·m、加速度9.8m/s²、面积3亩、航速20节')).toBe('力10 N·m、加速度9.8 m/s²、面积3 亩、航速20 节')
+  })
+  it('正文与链接文本使用相同的大小写和型号保护配置', () => {
+    const options = { caseSensitive: false, protectedModels: ['X10'] }
+    expect(processMarkdownContent('设备X10，正文10gbps，[设备X10和10gbps](https://example.com)', undefined, options)).toBe('设备 X10，正文 10 gbps，[设备 X10 和 10 gbps](https://example.com)')
+  })
 })
 
 describe('applyTightDegreePercent', () => {
@@ -499,6 +510,10 @@ describe('getLineViolations', () => {
     expect(getLineViolations('[转速120rpm](https://example.com)', allOn, { additional: ['rpm'] }).some(x => x.code === 'MAS007')).toBe(true)
     expect(getLineViolations('![转速120rpm](image.png)', allOn, { additional: ['rpm'] }).some(x => x.code === 'MAS007')).toBe(false)
     expect(getLineViolations('`[转速120rpm](url)`', allOn, { additional: ['rpm'] }).some(x => x.code === 'MAS007')).toBe(false)
+  })
+  it('型号保护名单同时抑制 MAS007 诊断', () => {
+    expect(getLineViolations('型号10GB和速度20GB', allOn, { protectedModels: ['10GB'] })
+      .filter(x => x.code === 'MAS007')).toHaveLength(1)
   })
   it('空行无违规', () => {
     expect(getLineViolations('', allOn)).toHaveLength(0)
