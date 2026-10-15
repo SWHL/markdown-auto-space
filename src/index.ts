@@ -1,5 +1,5 @@
 import * as vscode from 'vscode'
-import { getMarkdownAutoSpaceChangeCount, getMarkdownAutoSpaceConfig, getMarkdownAutoSpaceEdits, isExcluded, shouldProcessFile } from './utils'
+import { getMarkdownAutoSpaceChangeCount, getMarkdownAutoSpaceConfig, getMarkdownAutoSpaceEdits, getMarkdownAutoSpaceRuleHitCounts, isExcluded, shouldProcessFile } from './utils'
 import { shouldRunFormatOnSave } from './type'
 import { createDiagnosticsController } from './diagnostics'
 import { getRuleCompletionItems, getRuleHover } from './ruleProviders'
@@ -77,6 +77,25 @@ function rangesOverlap(left: vscode.Range, right: vscode.Range): boolean {
   const endsAfterStart = left.end.line > right.start.line
     || (left.end.line === right.start.line && left.end.character >= right.start.character)
   return startsBeforeEnd && endsAfterStart
+}
+
+function applyTextEdits(document: vscode.TextDocument, text: string, edits: vscode.TextEdit[]): string {
+  return [...edits]
+    .map(edit => ({
+      start: document.offsetAt(edit.range.start),
+      end: document.offsetAt(edit.range.end),
+      newText: edit.newText,
+    }))
+    .sort((left, right) => right.start - left.start)
+    .reduce((result, edit) => result.slice(0, edit.start) + edit.newText + result.slice(edit.end), text)
+}
+
+function formatRuleSummary(counts: Record<string, number>): string {
+  return Object.entries(counts)
+    .filter(([, count]) => count > 0)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([code, count]) => `${code}: ${count}`)
+    .join(', ')
 }
 
 function codeActionKindRequested(only: vscode.CodeActionKind | undefined, kind: vscode.CodeActionKind): boolean {
@@ -160,6 +179,66 @@ export function activate(context: vscode.ExtensionContext) {
       showStatus(`Markdown Auto Space: Formatted document (${changeCount} changes).`)
   })
   context.subscriptions.push(markdownAutoSpaceListener)
+
+  const previewCommand = vscode.commands.registerCommand('extension.markdownAutoSpacePreview', async () => {
+    log('Command: Preview Changes')
+    const editor = vscode.window.activeTextEditor
+    if (!editor) {
+      void vscode.window.showWarningMessage('Markdown Auto Space: Open a Markdown file before previewing changes.')
+      return
+    }
+
+    const document = editor.document
+    if (!shouldProcessFile(document)) {
+      if (document.languageId === 'markdown' && isExcluded(document))
+        showStatus('Markdown Auto Space: Skipped excluded file.')
+      else
+        void vscode.window.showWarningMessage(`Markdown Auto Space: Markdown files only (current language: ${document.languageId}).`)
+      return
+    }
+
+    const originalText = document.getText()
+    const originalVersion = document.version
+    const edits = getMarkdownAutoSpaceEdits(document, originalText) ?? []
+    if (!edits.length) {
+      showStatus('Markdown Auto Space: No changes needed.')
+      return
+    }
+
+    const changeCount = getMarkdownAutoSpaceChangeCount(document, originalText)
+    const ruleSummary = formatRuleSummary(getMarkdownAutoSpaceRuleHitCounts(document, originalText))
+    const previewText = applyTextEdits(document, originalText, edits)
+    const previewDocument = await vscode.workspace.openTextDocument({ content: previewText, language: document.languageId })
+    await vscode.commands.executeCommand(
+      'vscode.diff',
+      document.uri,
+      previewDocument.uri,
+      `Markdown Auto Space: Preview (${changeCount} changes)`,
+    )
+
+    const summary = ruleSummary
+      ? `Markdown Auto Space: ${changeCount} changes pending (${ruleSummary}). Apply changes?`
+      : `Markdown Auto Space: ${changeCount} changes pending. Apply changes?`
+    const choice = await vscode.window.showInformationMessage(summary, 'Apply Changes', 'Cancel')
+    if (choice !== 'Apply Changes') {
+      log('  Preview cancelled')
+      return
+    }
+    if (typeof originalVersion === 'number' && document.version !== originalVersion) {
+      void vscode.window.showWarningMessage('Markdown Auto Space: The document changed while the preview was open; no changes were applied.')
+      return
+    }
+
+    const workspaceEdit = new vscode.WorkspaceEdit()
+    workspaceEdit.set(document.uri, edits)
+    const applied = await vscode.workspace.applyEdit(workspaceEdit)
+    log(`  Preview applyEdit result: ${applied}`)
+    if (applied) {
+      diagnostics.update(document)
+      showStatus(`Markdown Auto Space: Formatted document (${changeCount} changes).`)
+    }
+  })
+  context.subscriptions.push(previewCommand)
 
   context.subscriptions.push(
     vscode.workspace.onWillSaveTextDocument((event) => {

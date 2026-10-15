@@ -27,7 +27,8 @@
   },
   "activationEvents": [
     "onLanguage:markdown",
-    "onCommand:extension.markdownAutoSpace"
+    "onCommand:extension.markdownAutoSpace",
+    "onCommand:extension.markdownAutoSpacePreview"
   ],
   "contributes": {
     "commands": [
@@ -35,12 +36,21 @@
         "command": "extension.markdownAutoSpace",
         "title": "Markdown Auto Space: Format Document",
         "icon": "$(symbol-misc)"
+      },
+      {
+        "command": "extension.markdownAutoSpacePreview",
+        "title": "Markdown Auto Space: Preview Changes",
+        "icon": "$(diff)"
       }
     ],
     "menus": {
       "commandPalette": [
         {
           "command": "extension.markdownAutoSpace",
+          "when": "editorLangId == markdown"
+        },
+        {
+          "command": "extension.markdownAutoSpacePreview",
           "when": "editorLangId == markdown"
         }
       ],
@@ -49,11 +59,21 @@
           "command": "extension.markdownAutoSpace",
           "when": "editorLangId == markdown",
           "group": "1_modification"
+        },
+        {
+          "command": "extension.markdownAutoSpacePreview",
+          "when": "editorLangId == markdown",
+          "group": "1_modification"
         }
       ],
       "editor/context": [
         {
           "command": "extension.markdownAutoSpace",
+          "when": "editorLangId == markdown",
+          "group": "1_modification"
+        },
+        {
+          "command": "extension.markdownAutoSpacePreview",
           "when": "editorLangId == markdown",
           "group": "1_modification"
         }

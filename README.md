@@ -101,7 +101,14 @@ code --install-extension SWHL.markdown-auto-space
 - 也可以从编辑器标题栏或右键菜单运行；右键菜单中的命令位于修改 / 格式化区域，靠近 VS Code 内置的 `Format Document`
 - 格式化完成后，状态栏显示实际修改数量；没有变化时仅显示短暂状态提示，不弹出通知
 
-### 3. See diagnostics before fixing
+### 3. Preview changes
+
+- 命令面板运行 `Markdown Auto Space: Preview Changes`
+- 扩展会打开 VS Code 的 diff 编辑器，展示原文与格式化结果，并在摘要中显示总修改数和各 MAS 规则命中数
+- 选择 `Apply Changes` 后才会应用与 `Format Document` 相同的最小范围编辑；选择 `Cancel` 或关闭提示不会修改原文
+- 文档无需修改时只显示状态栏提示，不创建空 diff
+
+### 4. See diagnostics before fixing
 
 开启 `markdownAutoSpace.diagnostics.enable` 后，扩展会像 markdownlint 一样用波浪线提示问题，并显示对应规则码：
 

@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import * as vscode from 'vscode'
 import { activate, deactivate } from '../src/index'
 
 const mock = vi.hoisted(() => {
@@ -25,6 +26,10 @@ const mock = vi.hoisted(() => {
     rangeFormattingProvider: undefined as any,
     codeActionProvider: undefined as any,
     commandId: undefined as string | undefined,
+    commandIds: [] as string[],
+    commandHandlers: new Map<string, any>(),
+    executeCommand: vi.fn(),
+    openedPreview: undefined as any,
     completionProvider: undefined as any,
     hoverProvider: undefined as any,
   }
@@ -100,10 +105,13 @@ vi.mock('vscode', () => {
       showInformationMessage: vi.fn(),
     },
     commands: {
-      registerCommand: (id: string) => {
+      registerCommand: (id: string, handler: any) => {
         mock.state.commandId = id
+        mock.state.commandIds.push(id)
+        mock.state.commandHandlers.set(id, handler)
         return { dispose: vi.fn() }
       },
+      executeCommand: mock.state.executeCommand,
     },
     languages: {
       match: () => mock.state.exclude.length ? 1 : 0,
@@ -151,6 +159,12 @@ vi.mock('vscode', () => {
         },
       }),
       applyEdit: mock.state.applyEdit,
+      openTextDocument: vi.fn(async (options: any) => {
+        mock.state.openedPreview = options
+        return {
+          uri: { toString: () => 'untitled:markdown-auto-space-preview' },
+        }
+      }),
       onWillSaveTextDocument: register('willSave'),
       onDidChangeTextDocument: register('didChange'),
       onDidSaveTextDocument: register('didSave'),
@@ -173,6 +187,7 @@ function createDocument(uri = 'file:///test.md', text = '中文English') {
       const line = Math.max(0, lineOffsets.findLastIndex(start => start <= offset))
       return { line, character: offset - lineOffsets[line]! }
     },
+    offsetAt: (position: { line: number, character: number }) => lineOffsets[position.line]! + position.character,
     lineAt: (line = 0) => ({
       text: lines[line]!,
       range: {
@@ -210,14 +225,54 @@ describe('save event flow', () => {
     mock.state.rangeFormattingProvider = undefined
     mock.state.codeActionProvider = undefined
     mock.state.commandId = undefined
+    mock.state.commandIds.length = 0
+    mock.state.commandHandlers.clear()
+    mock.state.executeCommand.mockReset()
+    mock.state.openedPreview = undefined
+    ;(vscode as any).window.showInformationMessage.mockReset()
     activate({ subscriptions: [] } as any)
   })
 
   it('激活时注册 Markdown 格式化命令和 VS Code providers', () => {
-    expect(mock.state.commandId).toBe('extension.markdownAutoSpace')
+    expect(mock.state.commandIds).toContain('extension.markdownAutoSpace')
+    expect(mock.state.commandIds).toContain('extension.markdownAutoSpacePreview')
     expect(mock.state.formattingProvider).toBeDefined()
     expect(mock.state.rangeFormattingProvider).toBeDefined()
     expect(mock.state.codeActionProvider).toBeDefined()
+  })
+
+  it('预览命令打开 diff 并确认后应用相同的最小范围编辑', async () => {
+    const document = createDocument('file:///test.md', '中文English')
+    mock.state.executeCommand.mockResolvedValue(undefined)
+    ;(vscode as any).window.activeTextEditor = { document }
+    ;(vscode as any).window.showInformationMessage.mockResolvedValue('Apply Changes')
+
+    await mock.state.commandHandlers.get('extension.markdownAutoSpacePreview')!()
+
+    expect(mock.state.openedPreview.content).toBe('中文 English')
+    expect(mock.state.executeCommand).toHaveBeenCalledWith(
+      'vscode.diff',
+      document.uri,
+      expect.anything(),
+      expect.stringContaining('1 changes'),
+    )
+    expect(mock.state.applyEdit).toHaveBeenCalledWith(expect.objectContaining({ changes: expect.any(Map) }))
+  })
+
+  it('取消预览不会应用编辑，无修改时不创建 diff', async () => {
+    const document = createDocument('file:///test.md', '中文English')
+    ;(vscode as any).window.activeTextEditor = { document }
+    ;(vscode as any).window.showInformationMessage.mockResolvedValue('Cancel')
+    await mock.state.commandHandlers.get('extension.markdownAutoSpacePreview')!()
+    expect(mock.state.applyEdit).not.toHaveBeenCalled()
+    expect(mock.state.executeCommand).toHaveBeenCalledTimes(1)
+
+    mock.state.executeCommand.mockClear()
+    mock.state.openedPreview = undefined
+    ;(vscode as any).window.activeTextEditor = { document: createDocument('file:///test.md', '中文 English') }
+    await mock.state.commandHandlers.get('extension.markdownAutoSpacePreview')!()
+    expect(mock.state.openedPreview).toBeUndefined()
+    expect(mock.state.executeCommand).not.toHaveBeenCalled()
   })
 
   it('仅手动保存通过 waitUntil 返回 TextEdit，且保存流程不调用 applyEdit', async () => {

@@ -200,6 +200,17 @@ export function getMarkdownAutoSpaceChangeCount(document: TextDocument, text: st
   return getMinimalTextChanges(text, processMarkdownContent(text, rules, units)).length
 }
 
+/** Return the number of current violations for each MAS rule. */
+export function getMarkdownAutoSpaceRuleHitCounts(document: TextDocument, text: string): Record<string, number> {
+  if (!shouldProcessFile(document))
+    return {}
+  const { rules, units } = getMarkdownAutoSpaceConfig(document)
+  const counts: Record<string, number> = {}
+  for (const violation of getMarkdownSpaceViolations(text, rules, units))
+    counts[violation.code] = (counts[violation.code] ?? 0) + 1
+  return counts
+}
+
 /**
  * 计算当前文档的「加空格」规则诊断（类似 markdownlint 的 MD022 等）
  * 仅对 Markdown 文档且配置开启时返回
