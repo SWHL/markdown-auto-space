@@ -341,19 +341,19 @@
 
 关闭后，该规则既不会在保存 / 格式化时生效，也不会在编辑器中显示对应诊断。
 
-## 语言范围
+## 文件范围
 
-`markdownAutoSpace.languageIds` 控制扩展处理哪些 VS Code 语言 ID，默认只有 `markdown`。例如需要处理 MDX, Quarto 和 R Markdown 时可配置为：
+`markdownAutoSpace.fileExtensions` 控制扩展处理哪些文件后缀，默认只有 `.md`。`.txt` 也受支持，但需要显式加入配置；后缀可带或不带开头的点号，扩展会自动规范化，并按大小写不敏感方式匹配。例如需要处理纯文本、MDX、Quarto 和 R Markdown 时可配置为：
 
 ```json
 {
-  "markdownAutoSpace.languageIds": ["markdown", "mdx", "quarto", "rmarkdown"]
+  "markdownAutoSpace.fileExtensions": [".md", ".txt", ".mdx", ".qmd", ".rmd"]
 }
 ```
 
-扩展同时兼容 `quarto` / `qmd` 和 `rmarkdown` / `rmd` 两组语言 ID。语言模式由 VS Code 及对应的语言扩展提供，本扩展不注册语言或按文件扩展名自动切换模式。修改配置会立即更新 provider、命令菜单和已打开文档的诊断；设为 `[]` 可禁用所有语言。
+文件名匹配不依赖 VS Code 的语言模式，因此 `.mdx`、`.qmd`、`.rmd` 或 `.txt` 文件即使被识别为纯文本也会参与处理。修改配置会立即更新 provider、命令菜单和已打开文档的诊断；设为 `[]` 可禁用所有后缀。
 
-各语言共用 Markdown 规则及保护逻辑。MDX 中的 JSX 标签属性、普通 `{...}` 表达式、跨行表达式、字符串、注释、正则以及 `import` / `export` 语句都会被保护；表达式和代码中的中文混排标识符不会被空格规则改写。表达式前后的正文仍会继续格式化。
+各后缀共用 Markdown 规则及保护逻辑。MDX 中的 JSX 标签属性、普通 `{...}` 表达式、跨行表达式、字符串、注释、正则以及 `import` / `export` 语句都会被保护；表达式和代码中的中文混排标识符不会被空格规则改写。表达式前后的正文仍会继续格式化。
 
 ## 排除文件
 

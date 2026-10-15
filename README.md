@@ -98,17 +98,17 @@ code --install-extension SWHL.markdown-auto-space
 
 ### 支持 MDX, Quarto 和 R Markdown
 
-扩展按 VS Code 的语言 ID 判断是否处理文档。为保持兼容，默认值为 `["markdown"]`，因此不会影响只想处理 Markdown 的用户。需要处理其他 Markdown 类语言时，在设置中追加对应语言 ID：
+扩展按文件后缀判断是否处理文档。默认值为 `[".md"]`；需要处理 `.txt` 或其他 Markdown 类文件时，在设置中追加后缀：
 
 ```json
 {
-  "markdownAutoSpace.languageIds": ["markdown", "mdx", "quarto", "rmarkdown"]
+  "markdownAutoSpace.fileExtensions": [".md", ".txt", ".mdx", ".qmd", ".rmd"]
 }
 ```
 
-扩展会兼容 `quarto` / `qmd` 和 `rmarkdown` / `rmd` 两组语言 ID。语言 ID 由 VS Code 的语言模式及已安装的语言扩展决定，不等于文件扩展名；本扩展不会注册这些语言或自动改变文件的语言模式。请安装对应语言扩展，或在编辑器右下角选择正确的语言模式。其他 Markdown 方言也可以填入其实际语言 ID。
+后缀可带或不带开头的点号，扩展会自动规范化，并忽略文件名后缀的大小写。`.txt` 受支持但不在默认列表中，需要显式加入配置。文件名匹配不依赖 VS Code 的语言模式，因此配置后的 `.mdx` 或 `.txt` 文件即使被识别为纯文本也会参与处理。
 
-格式化 provider、保存事务、诊断、命令菜单、代码操作和局部指令提示均使用这一配置。修改配置后会立即重新注册 provider、更新菜单并刷新已打开文档的诊断；设为 `[]` 可禁用所有语言。扩展会在 VS Code 启动完成后激活，以支持自定义语言 ID。
+格式化 provider、保存事务、诊断、命令菜单、代码操作和局部指令提示均使用这一配置。修改配置后会立即重新注册 provider、更新菜单并刷新已打开文档的诊断；设为 `[]` 可禁用所有后缀。扩展会在 VS Code 启动完成后激活。
 
 MDX 中的 JSX 标签属性、普通 `{...}` 表达式、跨行表达式、字符串、注释、正则以及 `import` / `export` 语句都会被保护；表达式和代码中的中文混排标识符不会被空格规则改写。表达式前后的正文仍会继续格式化。
 
@@ -145,14 +145,14 @@ VS Code 的标准 `Format Document` 是另一条路径。默认不会注册本�
 - `MAS008`: 度数、百分号与数字之间不应有空格
 - `MAS009`: 全形标点旁不应有空格
 
-启用诊断、切换 `markdownAutoSpace.preset`、切换 `markdownAutoSpace.rules` 中的任一规则，或修改 `markdownAutoSpace.units`、`markdownAutoSpace.exclude`、`markdownAutoSpace.languageIds` 后，已打开的已启用语言文档会立即更新诊断，无需再次编辑或保存。移出语言列表或命中排除配置的文档会清除诊断。关闭诊断后，问题面板中的提示和编辑器波浪线会立即清空；其他配置变化不会触发全量诊断刷新。
+启用诊断、切换 `markdownAutoSpace.preset`、切换 `markdownAutoSpace.rules` 中的任一规则，或修改 `markdownAutoSpace.units`、`markdownAutoSpace.exclude`、`markdownAutoSpace.fileExtensions` 后，已打开的已启用文件会立即更新诊断，无需再次编辑或保存。移出后缀列表或命中排除配置的文档会清除诊断。关闭诊断后，问题面板中的提示和编辑器波浪线会立即清空；其他配置变化不会触发全量诊断刷新。
 
 ## Configuration
 
 | 配置项 | 默认值 | 说明 |
 |------|------|------|
 | `markdownAutoSpace.diagnostics.enable` | `true` | 显示规则提示波浪线 |
-| `markdownAutoSpace.languageIds` | `["markdown"]` | 要处理的 VS Code 语言 ID；可加入 `mdx`、`quarto`、`rmarkdown` 等 |
+| `markdownAutoSpace.fileExtensions` | `[".md"]` | 要处理的文件后缀；可加入 `.txt`、`.mdx`、`.qmd`、`.rmd` 等 |
 | `markdownAutoSpace.formatOnSave` | `true` | 手动保存 Markdown 时自动修正 |
 | `markdownAutoSpace.formatProvider.enable` | `false` | 启用本扩展对 VS Code 标准 `Format Document` 的格式化 provider；扩展专用命令不受影响 |
 | `markdownAutoSpace.exclude` | `[]` | 在所有格式化、命令和诊断中排除匹配的文件 |
@@ -213,7 +213,7 @@ VS Code 的标准 `Format Document` 是另一条路径。默认不会注册本�
 
 ## Behavior details
 
-- 仅在 `markdownAutoSpace.languageIds` 配置的语言 ID 中生效，默认是 `markdown`
+- 仅在 `markdownAutoSpace.fileExtensions` 配置的文件后缀中生效，默认是 `.md`；`.txt` 需要显式配置
 - `markdownAutoSpace.exclude` 命中的文档不会被格式化，也不会产生诊断
 - 自动保存、失焦保存不会触发 `formatOnSave`
 - 保存时只返回实际变化位置的编辑，不会全文替换文档；未变化文本、光标 / 选区和换行格式会尽量保持稳定

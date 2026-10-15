@@ -82,15 +82,13 @@
     "configuration": {
       "title": "Markdown Auto Space configuration",
       "properties": {
-        "markdownAutoSpace.languageIds": {
+        "markdownAutoSpace.fileExtensions": {
           "type": "array",
-          "default": [
-            "markdown"
-          ],
+          "default": [".md"],
           "items": {
             "type": "string"
           },
-          "description": "Language IDs processed by Markdown Auto Space. Markdown is enabled by default; add mdx, quarto, rmarkdown, or other Markdown-like language IDs as needed."
+          "description": "File suffixes processed by Markdown Auto Space. Defaults to .md; add .txt or other suffixes such as .mdx, .qmd, or .rmd as needed. A leading dot is optional."
         },
         "markdownAutoSpace.diagnostics.enable": {
           "type": "boolean",

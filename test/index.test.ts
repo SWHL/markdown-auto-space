@@ -9,12 +9,12 @@ import {
   processMarkdownContent,
   shouldSkipLine,
 } from '../src/markdownSpace'
-import { DEFAULT_MARKDOWN_SPACE_RULES, MANUAL_SAVE_REASON, MARKDOWN_SPACE_PRESET_RULES, RULES_DOC_BASE_URL, getRuleDocUrl, normalizeRules, shouldRunFormatOnSave } from '../src/type'
+import { DEFAULT_FILE_EXTENSIONS, DEFAULT_MARKDOWN_SPACE_RULES, MANUAL_SAVE_REASON, MARKDOWN_SPACE_PRESET_RULES, RULES_DOC_BASE_URL, getRuleDocUrl, normalizeRules, shouldRunFormatOnSave } from '../src/type'
 import type { MarkdownSpaceRulesType } from '../src/type'
 import { getMarkdownAutoSpaceChangeCount, getMarkdownAutoSpaceConfig, getMarkdownAutoSpaceDiagnostics, getMarkdownAutoSpaceEdits, getMarkdownAutoSpaceRuleHitCounts, isExcluded, shouldProcessFile } from '../src/utils'
 
 const vscodeMock = vi.hoisted(() => ({
-  languageIds: ['markdown'] as string[],
+  fileExtensions: ['.md'] as string[],
   exclude: [] as string[],
   units: undefined as Record<string, unknown> | undefined,
   preset: 'default' as string,
@@ -77,8 +77,8 @@ vi.mock('vscode', () => {
             return true
           if (key === 'exclude')
             return vscodeMock.exclude
-          if (key === 'languageIds')
-            return vscodeMock.languageIds
+          if (key === 'fileExtensions')
+            return vscodeMock.fileExtensions
           if (key === 'units')
             return vscodeMock.units
           return undefined
@@ -600,10 +600,10 @@ describe('MDX code protection', () => {
   })
 
   it('文档层最小编辑、诊断、计数与原始混合换行使用同一 MDX 保护', () => {
-    vscodeMock.languageIds = ['markdown', 'mdx']
+    vscodeMock.fileExtensions = ['.md', '.mdx']
     try {
       const input = 'export const 中文English = {\r\n中文English: 1\n}\r\n\n前文English {中文English} 后文English'
-      const document = createMockDocument(input, 'mdx')
+      const document = createMockDocument(input, 'plaintext', { scheme: 'file', path: '/workspace/docs/readme.mdx' })
       const edits = getMarkdownAutoSpaceEdits(document, input)
       expect(edits).toHaveLength(2)
       expect(applyEdits(input, document, edits)).toBe(input.replace('前文English', '前文 English').replace('后文English', '后文 English'))
@@ -612,7 +612,7 @@ describe('MDX code protection', () => {
       expect(getMarkdownAutoSpaceRuleHitCounts(document, input)).toEqual({ MAS001: 2 })
     }
     finally {
-      vscodeMock.languageIds = ['markdown']
+      vscodeMock.fileExtensions = ['.md']
     }
   })
 })
@@ -877,8 +877,8 @@ describe('getMarkdownAutoSpaceEdits', () => {
     expect(edits?.[1]?.range.start).toEqual({ line: 1, character: 2 })
   })
 
-  it('非 Markdown 文档不返回 edit', () => {
-    const document = createMockDocument('中文English', 'plaintext')
+  it('未配置的文件后缀不返回 edit', () => {
+    const document = createMockDocument('中文English', 'markdown', { scheme: 'file', path: '/workspace/docs/readme.txt' })
     expect(getMarkdownAutoSpaceEdits(document, '中文English')).toBeUndefined()
   })
 })
@@ -928,11 +928,11 @@ describe('markdownAutoSpace.exclude', () => {
     vscodeMock.match.mockReturnValue(0)
   })
 
-  it('工作区外使用普通 glob，未匹配的非文件 URI 仍可处理', () => {
+  it('工作区外使用普通 glob，带匹配后缀的非文件 URI 仍可处理', () => {
     vscodeMock.exclude = ['**/CHANGELOG.md']
     vscodeMock.workspaceFolder = undefined
     vscodeMock.match.mockReturnValue(0)
-    const document = createMockDocument('中文English', 'markdown', { scheme: 'untitled', path: 'Untitled-1' })
+    const document = createMockDocument('中文English', 'markdown', { scheme: 'vscode-vfs', path: '/project/docs/readme.md' })
 
     expect(isExcluded(document)).toBe(false)
     expect(shouldProcessFile(document)).toBe(true)
@@ -943,18 +943,40 @@ describe('markdownAutoSpace.exclude', () => {
 })
 
 describe('getMarkdownAutoSpaceConfig', () => {
-  it('默认仅启用 markdown，可配置 mdx/quarto/rmarkdown 等语言 ID', () => {
-    expect(getMarkdownAutoSpaceConfig().languageIds).toEqual(['markdown'])
-    vscodeMock.languageIds = ['markdown', 'mdx', 'quarto', 'rmarkdown', 'mdx', ' ']
+  it('默认仅启用 Markdown 后缀', () => {
+    expect(DEFAULT_FILE_EXTENSIONS).toEqual(['.md'])
+  })
+
+  it('可配置其他后缀并规范化点号与大小写', () => {
+    expect(getMarkdownAutoSpaceConfig().fileExtensions).toEqual(['.md'])
+    vscodeMock.fileExtensions = ['.md', 'mdx', '.QMD', 'rmd', '.mdx', ' ']
     try {
-      expect(getMarkdownAutoSpaceConfig().languageIds).toEqual(['markdown', 'mdx', 'quarto', 'qmd', 'rmarkdown', 'rmd'])
-      expect(shouldProcessFile(createMockDocument('中文English', 'mdx'))).toBe(true)
-      expect(shouldProcessFile(createMockDocument('中文English', 'qmd'))).toBe(true)
-      expect(shouldProcessFile(createMockDocument('中文English', 'rmd'))).toBe(true)
-      expect(getMarkdownAutoSpaceEdits(createMockDocument('中文English', 'mdx'), '中文English')).toBeDefined()
+      expect(getMarkdownAutoSpaceConfig().fileExtensions).toEqual(['.md', '.mdx', '.qmd', '.rmd'])
+      expect(shouldProcessFile(createMockDocument('中文English', 'plaintext', { scheme: 'file', path: '/workspace/docs/readme.MDX' }))).toBe(true)
+      expect(shouldProcessFile(createMockDocument('中文English', 'plaintext', { scheme: 'vscode-vfs', path: '/workspace/docs/readme.qmd' }))).toBe(true)
+      expect(shouldProcessFile(createMockDocument('中文English', 'plaintext', { scheme: 'file', path: '/workspace/docs/readme.rmd' }))).toBe(true)
+      expect(shouldProcessFile(createMockDocument('中文English', 'mdx', { scheme: 'file', path: '/workspace/docs/readme.txt' }))).toBe(false)
     }
     finally {
-      vscodeMock.languageIds = ['markdown']
+      vscodeMock.fileExtensions = ['.md']
+    }
+  })
+  it('支持配置 .txt 文件，即使语言模式为纯文本', () => {
+    vscodeMock.fileExtensions = ['.txt']
+    try {
+      expect(shouldProcessFile(createMockDocument('中文English', 'plaintext', { scheme: 'file', path: '/workspace/docs/readme.txt' }))).toBe(true)
+    }
+    finally {
+      vscodeMock.fileExtensions = ['.md']
+    }
+  })
+  it('支持包含多个点号的文件后缀', () => {
+    vscodeMock.fileExtensions = ['.d.ts']
+    try {
+      expect(shouldProcessFile(createMockDocument('中文English', 'plaintext', { scheme: 'file', path: '/workspace/types/index.d.ts' }))).toBe(true)
+    }
+    finally {
+      vscodeMock.fileExtensions = ['.md']
     }
   })
   it('返回标准格式化 provider 开关', () => {

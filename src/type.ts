@@ -21,8 +21,8 @@ export interface DigitUnitConfig {
 
 export type MarkdownAutoSpacePreset = 'default' | 'conservative' | 'strict' | 'custom'
 
-/** Preserve the historical behavior unless users opt into Markdown-like languages. */
-export const DEFAULT_LANGUAGE_IDS = ['markdown']
+/** Preserve the historical behavior unless users opt into other file suffixes. */
+export const DEFAULT_FILE_EXTENSIONS = ['.md']
 
 export const DEFAULT_MARKDOWN_SPACE_RULES: MarkdownSpaceRulesType = {
   chineseAlnum: true,
@@ -85,8 +85,8 @@ export function normalizeRules(
 
 /** 扩展配置（从 VS Code 读取）；rules 由 normalizeRules 填充为完整对象 */
 export interface AutoSpaceConfigType {
-  /** Language IDs processed by the extension. */
-  languageIds: string[]
+  /** File suffixes processed by the extension (for example `.md` or `.mdx`). */
+  fileExtensions: string[]
   formatOnSave: boolean
   /** Whether the VS Code standard Format Document provider is enabled. */
   formatProviderEnabled: boolean

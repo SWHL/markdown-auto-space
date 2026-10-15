@@ -3,7 +3,7 @@ import type { TextDocument } from 'vscode'
 import { Diagnostic, DiagnosticSeverity, languages as Languages, Range, RelativePattern, TextEdit, Uri, window as Window, workspace as Workspace } from 'vscode'
 import { getMarkdownSpaceViolations, processMarkdownContent } from './markdownSpace'
 import type { AutoSpaceConfigType, MarkdownAutoSpacePreset } from './type'
-import { DEFAULT_LANGUAGE_IDS, getRuleDocUrl, normalizeRules } from './type'
+import { DEFAULT_FILE_EXTENSIONS, getRuleDocUrl, normalizeRules } from './type'
 
 interface TextChange {
   start: number
@@ -119,26 +119,14 @@ function getMinimalTextEdits(
  */
 export function getMarkdownAutoSpaceConfig(document?: TextDocument): AutoSpaceConfigType {
   const config = Workspace.getConfiguration('markdownAutoSpace', document?.uri)
-  const languageIdsRaw = config.get<unknown>('languageIds')
-  const configuredLanguageIds = Array.isArray(languageIdsRaw)
-    ? [...new Set(languageIdsRaw
-        .filter((languageId): languageId is string => typeof languageId === 'string')
-        .map(languageId => languageId.trim())
-        .filter(Boolean))]
-    : [...DEFAULT_LANGUAGE_IDS]
-  // Language IDs differ between the common Quarto and R Markdown extensions:
-  // accept both the product name and the short IDs used by some grammars.
-  const languageIds = [...new Set(configuredLanguageIds.flatMap((languageId) => {
-    if (languageId === 'quarto')
-      return ['quarto', 'qmd']
-    if (languageId === 'qmd')
-      return ['qmd', 'quarto']
-    if (languageId === 'rmarkdown')
-      return ['rmarkdown', 'rmd']
-    if (languageId === 'rmd')
-      return ['rmd', 'rmarkdown']
-    return [languageId]
-  }))]
+  const fileExtensionsRaw = config.get<unknown>('fileExtensions')
+  const fileExtensions = Array.isArray(fileExtensionsRaw)
+    ? [...new Set(fileExtensionsRaw
+        .filter((extension): extension is string => typeof extension === 'string')
+        .map(extension => extension.trim().toLowerCase())
+        .map(extension => extension.startsWith('.') ? extension : `.${extension}`)
+        .filter(extension => /^\.[a-z0-9][a-z0-9._-]*$/.test(extension)))]
+    : [...DEFAULT_FILE_EXTENSIONS]
   const formatOnSave = config.get('formatOnSave') as boolean
   const formatProviderEnabled = config.get('formatProvider.enable') as boolean
   const excludeRaw = config.get<unknown>('exclude')
@@ -160,7 +148,7 @@ export function getMarkdownAutoSpaceConfig(document?: TextDocument): AutoSpaceCo
     exclude: Array.isArray(unitsRaw?.exclude) ? unitsRaw.exclude.filter((unit): unit is string => typeof unit === 'string') : [],
   }
   return {
-    languageIds,
+    fileExtensions,
     formatOnSave,
     formatProviderEnabled,
     exclude,
@@ -170,9 +158,17 @@ export function getMarkdownAutoSpaceConfig(document?: TextDocument): AutoSpaceCo
   }
 }
 
-/** Whether a document language ID is enabled for Markdown Auto Space. */
+/** Whether a document's file name ends with a configured suffix. */
 export function isSupportedLanguage(document: TextDocument): boolean {
-  return getMarkdownAutoSpaceConfig(document).languageIds.includes(document.languageId)
+  const path = document.uri?.fsPath ?? document.uri?.path ?? ''
+  const normalizedPath = path.toLowerCase()
+  return getMarkdownAutoSpaceConfig(document).fileExtensions.some(extension => normalizedPath.endsWith(extension))
+}
+
+/** Language used for syntax protection, inferred from the file suffix. */
+function getDocumentLanguage(document: TextDocument): string {
+  const path = document.uri?.fsPath ?? document.uri?.path ?? ''
+  return path.toLowerCase().endsWith('.mdx') ? 'mdx' : document.languageId
 }
 
 /**
@@ -219,7 +215,7 @@ export function getMarkdownAutoSpaceEdits(
     return undefined
 
   const { rules, units } = getMarkdownAutoSpaceConfig(document)
-  const updatedText = processMarkdownContent(text, rules, units, document.languageId)
+  const updatedText = processMarkdownContent(text, rules, units, getDocumentLanguage(document))
   return getMinimalTextEdits(document, text, updatedText)
 }
 
@@ -228,7 +224,7 @@ export function getMarkdownAutoSpaceChangeCount(document: TextDocument, text: st
   if (!shouldProcessFile(document))
     return 0
   const { rules, units } = getMarkdownAutoSpaceConfig(document)
-  return getMinimalTextChanges(text, processMarkdownContent(text, rules, units, document.languageId)).length
+  return getMinimalTextChanges(text, processMarkdownContent(text, rules, units, getDocumentLanguage(document))).length
 }
 
 /** Return the number of current violations for each MAS rule. */
@@ -237,7 +233,7 @@ export function getMarkdownAutoSpaceRuleHitCounts(document: TextDocument, text: 
     return {}
   const { rules, units } = getMarkdownAutoSpaceConfig(document)
   const counts: Record<string, number> = {}
-  for (const violation of getMarkdownSpaceViolations(text, rules, units, document.languageId))
+  for (const violation of getMarkdownSpaceViolations(text, rules, units, getDocumentLanguage(document)))
     counts[violation.code] = (counts[violation.code] ?? 0) + 1
   return counts
 }
@@ -260,7 +256,7 @@ export function getMarkdownAutoSpaceDiagnostics(
     return []
 
   const { rules, units } = getMarkdownAutoSpaceConfig(document)
-  const violations = getMarkdownSpaceViolations(text, rules, units, document.languageId)
+  const violations = getMarkdownSpaceViolations(text, rules, units, getDocumentLanguage(document))
   const diagnostics: Diagnostic[] = []
   for (const v of violations) {
     if (v.lineIndex >= document.lineCount)
@@ -298,6 +294,6 @@ export function markdownAutoSpace(text: string) {
     return
 
   const { rules, units } = getMarkdownAutoSpaceConfig(document)
-  const updatedText = processMarkdownContent(text, rules, units, document.languageId)
+  const updatedText = processMarkdownContent(text, rules, units, getDocumentLanguage(document))
   return getMinimalTextEdits(document, text, updatedText)
 }

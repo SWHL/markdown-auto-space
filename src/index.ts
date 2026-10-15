@@ -94,14 +94,21 @@ function codeActionKindRequested(only: vscode.CodeActionKind | undefined, kind: 
   return only.contains ? only.contains(kind) : only === kind
 }
 
+/** Convert a normalized extension into a case-insensitive VS Code glob. */
+function extensionGlob(extension: string): string {
+  return [...extension]
+    .map(character => /[a-z]/i.test(character) ? `[${character.toLowerCase()}${character.toUpperCase()}]` : character)
+    .join('')
+}
+
 function refreshDiagnosticsForConfigurationChange(event: vscode.ConfigurationChangeEvent) {
   const diagnosticsChanged = event.affectsConfiguration('markdownAutoSpace.diagnostics.enable')
   const presetChanged = event.affectsConfiguration('markdownAutoSpace.preset')
   const rulesChanged = event.affectsConfiguration('markdownAutoSpace.rules')
   const unitsChanged = event.affectsConfiguration('markdownAutoSpace.units')
   const excludeChanged = event.affectsConfiguration('markdownAutoSpace.exclude')
-  const languageIdsChanged = event.affectsConfiguration('markdownAutoSpace.languageIds')
-  if (!diagnosticsChanged && !presetChanged && !rulesChanged && !unitsChanged && !excludeChanged && !languageIdsChanged)
+  const fileExtensionsChanged = event.affectsConfiguration('markdownAutoSpace.fileExtensions')
+  if (!diagnosticsChanged && !presetChanged && !rulesChanged && !unitsChanged && !excludeChanged && !fileExtensionsChanged)
     return
 
   const diagnosticsEnabled = vscode.workspace
@@ -151,7 +158,7 @@ export function activate(context: vscode.ExtensionContext) {
       }
       else {
         log('  Skipped: current language is not configured')
-        void vscode.window.showWarningMessage(`Markdown Auto Space: Language '${document.languageId}' is not enabled in markdownAutoSpace.languageIds.`)
+        void vscode.window.showWarningMessage(`Markdown Auto Space: File suffix '${document.uri.fsPath.split(/[\\/]/).pop()?.match(/\.[^./]+$/)?.[0] ?? '(none)'}' is not enabled in markdownAutoSpace.fileExtensions.`)
       }
       return
     }
@@ -189,7 +196,7 @@ export function activate(context: vscode.ExtensionContext) {
       if (isSupportedLanguage(document) && isExcluded(document))
         showStatus('Markdown Auto Space: Skipped excluded file.')
       else
-        void vscode.window.showWarningMessage(`Markdown Auto Space: Language '${document.languageId}' is not enabled in markdownAutoSpace.languageIds.`)
+        void vscode.window.showWarningMessage(`Markdown Auto Space: File suffix is not enabled in markdownAutoSpace.fileExtensions.`)
       return
     }
 
@@ -261,7 +268,7 @@ export function activate(context: vscode.ExtensionContext) {
     const configs = documents.length > 0
       ? documents.map(target => getMarkdownAutoSpaceConfig(target))
       : [getMarkdownAutoSpaceConfig()]
-    return [...new Set(configs.flatMap(config => config.languageIds))]
+    return [...new Set(configs.flatMap(config => config.fileExtensions))]
   }
   const disposeFormattingProviders = () => {
     formattingProviders.forEach(provider => provider.dispose())
@@ -282,7 +289,7 @@ export function activate(context: vscode.ExtensionContext) {
       return
     disposeFormattingProviders()
     providerLanguageIds = languageIds
-    formattingProviders = languageIds.map(languageId => vscode.languages.registerDocumentFormattingEditProvider(languageId, {
+    formattingProviders = languageIds.map(fileExtension => vscode.languages.registerDocumentFormattingEditProvider({ pattern: `**/*${extensionGlob(fileExtension)}` }, {
       provideDocumentFormattingEdits: (target) => {
         if (!getMarkdownAutoSpaceConfig(target).formatProviderEnabled)
           return []
@@ -332,14 +339,15 @@ export function activate(context: vscode.ExtensionContext) {
   const registerLanguageProviders = (document?: vscode.TextDocument) => {
     providerDisposables.splice(0).forEach(provider => provider.dispose())
     const languageIds = getProviderLanguageIds(document)
-    for (const languageId of languageIds) {
-      providerDisposables.push(vscode.languages.registerCodeActionsProvider(languageId, codeActionProvider, {
+    for (const fileExtension of languageIds) {
+      const selector = { pattern: `**/*${extensionGlob(fileExtension)}` }
+      providerDisposables.push(vscode.languages.registerCodeActionsProvider(selector, codeActionProvider, {
         providedCodeActionKinds: [vscode.CodeActionKind.QuickFix, vscode.CodeActionKind.SourceFixAll],
       }))
       if (typeof vscode.languages.registerCompletionItemProvider === 'function')
-        providerDisposables.push(vscode.languages.registerCompletionItemProvider(languageId, { provideCompletionItems: getRuleCompletionItems }, '<', '-', ' '))
+        providerDisposables.push(vscode.languages.registerCompletionItemProvider(selector, { provideCompletionItems: getRuleCompletionItems }, '<', '-', ' '))
       if (typeof vscode.languages.registerHoverProvider === 'function')
-        providerDisposables.push(vscode.languages.registerHoverProvider(languageId, { provideHover: getRuleHover }))
+        providerDisposables.push(vscode.languages.registerHoverProvider(selector, { provideHover: getRuleHover }))
     }
   }
   registerLanguageProviders(vscode.window.activeTextEditor?.document)
@@ -372,12 +380,12 @@ export function activate(context: vscode.ExtensionContext) {
       diagnostics.flush(doc)
     }),
     vscode.workspace.onDidChangeConfiguration((event) => {
-      if (event.affectsConfiguration('markdownAutoSpace.languageIds')) {
+      if (event.affectsConfiguration('markdownAutoSpace.fileExtensions')) {
         refreshCommandContext()
         registerLanguageProviders(vscode.window.activeTextEditor?.document)
       }
       if (event.affectsConfiguration('markdownAutoSpace.formatProvider.enable')
-        || event.affectsConfiguration('markdownAutoSpace.languageIds'))
+        || event.affectsConfiguration('markdownAutoSpace.fileExtensions'))
         refreshFormattingProviders(vscode.window.activeTextEditor?.document)
       refreshDiagnosticsForConfigurationChange(event)
     }),
