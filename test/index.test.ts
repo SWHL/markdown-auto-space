@@ -9,13 +9,14 @@ import {
   processMarkdownContent,
   shouldSkipLine,
 } from '../src/markdownSpace'
-import { DEFAULT_MARKDOWN_SPACE_RULES, MANUAL_SAVE_REASON, RULES_DOC_BASE_URL, getRuleDocUrl, normalizeRules, shouldRunFormatOnSave } from '../src/type'
+import { DEFAULT_MARKDOWN_SPACE_RULES, MANUAL_SAVE_REASON, MARKDOWN_SPACE_PRESET_RULES, RULES_DOC_BASE_URL, getRuleDocUrl, normalizeRules, shouldRunFormatOnSave } from '../src/type'
 import type { MarkdownSpaceRulesType } from '../src/type'
 import { getMarkdownAutoSpaceConfig, getMarkdownAutoSpaceDiagnostics, getMarkdownAutoSpaceEdits, isExcluded, shouldProcessFile } from '../src/utils'
 
 const vscodeMock = vi.hoisted(() => ({
   exclude: [] as string[],
   units: undefined as Record<string, unknown> | undefined,
+  preset: 'default' as string,
   workspaceFolder: undefined as { name: string, uri: { path: string } } | undefined,
   match: vi.fn(() => 0),
 }))
@@ -68,6 +69,8 @@ vi.mock('vscode', () => {
             return false
           if (key === 'rules')
             return undefined
+          if (key === 'preset')
+            return vscodeMock.preset
           if (key === 'diagnostics.enable')
             return true
           if (key === 'exclude')
@@ -850,7 +853,61 @@ describe('getMarkdownAutoSpaceConfig', () => {
     expect(config.formatOnDocument).toBe(false)
     expect(config.formatOnSave).toBe(true)
     expect(config.exclude).toEqual([])
+    expect(config.preset).toBe('default')
     expect('spaceType' in config).toBe(false)
+  })
+
+  it.each([
+    ['default', DEFAULT_MARKDOWN_SPACE_RULES],
+    ['strict', MARKDOWN_SPACE_PRESET_RULES.strict],
+  ] as const)('%s preset uses its rule baseline', (preset, expected) => {
+    vscodeMock.preset = preset
+    try {
+      expect(getMarkdownAutoSpaceConfig().rules).toEqual(expected)
+    }
+    finally {
+      vscodeMock.preset = 'default'
+    }
+  })
+
+  it('conservative preset enables only core rules by default', () => {
+    vscodeMock.preset = 'conservative'
+    try {
+      const rules = getMarkdownAutoSpaceConfig().rules
+      expect(rules.chineseAlnum).toBe(true)
+      expect(rules.chineseBacktick).toBe(true)
+      expect(rules.chineseLinkUrl).toBe(true)
+      expect(rules.chineseLinkText).toBe(false)
+      expect(rules.digitUnitSpace).toBe(true)
+      expect(rules.dunhaoToComma).toBe(false)
+      expect(rules.slashSpace).toBe(false)
+      expect(rules.tightDegreePercent).toBe(false)
+      expect(rules.noSpaceAroundCjkPunct).toBe(false)
+    }
+    finally {
+      vscodeMock.preset = 'default'
+    }
+  })
+
+  it('explicit rules override preset while unspecified rules inherit it', () => {
+    vscodeMock.preset = 'conservative'
+    const originalGetConfiguration = (vscodeMock as unknown as { preset: string }).preset
+    try {
+      // The mock returns undefined for rules by default; exercise precedence through normalizeRules directly.
+      const rules = normalizeRules({ MAS005: true, MAS001: false }, 'conservative')
+      expect(rules.slashSpace).toBe(true)
+      expect(rules.chineseAlnum).toBe(false)
+      expect(rules.dunhaoToComma).toBe(false)
+    }
+    finally {
+      vscodeMock.preset = originalGetConfiguration
+    }
+  })
+
+  it('custom preset preserves partial rules behavior', () => {
+    const rules = normalizeRules({ MAS005: false }, 'custom')
+    expect(rules.slashSpace).toBe(false)
+    expect(rules.chineseAlnum).toBe(true)
   })
   it('默认 additional 为空时仍读取 include 别名', () => {
     vscodeMock.units = { additional: [], include: ['rpm'], exclude: [] }

@@ -377,6 +377,15 @@ describe('save event flow', () => {
     expect(mock.state.diagnosticSet).toHaveBeenCalledWith(document.uri, expect.any(Array))
   })
 
+  it('切换 preset 时立即刷新所有已打开 Markdown 文档', () => {
+    const document = createDocument()
+    mock.state.textDocuments.push(document)
+    mock.events.didChangeConfiguration[0]!({
+      affectsConfiguration: (key: string) => key === 'markdownAutoSpace.preset',
+    })
+    expect(mock.state.diagnosticSet).toHaveBeenCalledWith(document.uri, expect.any(Array))
+  })
+
   it('新增排除配置时立即删除已打开文档的诊断', () => {
     const document = createDocument()
     mock.state.textDocuments.push(document)

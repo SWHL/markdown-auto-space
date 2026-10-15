@@ -31,7 +31,30 @@
 | **MAS008** | `MAS008` | 度数、百分号与数字之间不应有空格 |
 | **MAS009** | `MAS009` | 全形句读标点旁不应有空格 |
 
-在 VS Code 中开启 `markdownAutoSpace.diagnostics.enable` 后，违反上述规则的位置会显示波浪线，悬停可看到规则码与说明。修改 `markdownAutoSpace.rules` 或 `markdownAutoSpace.units` 后，已打开文档的诊断会立即刷新。
+在 VS Code 中开启 `markdownAutoSpace.diagnostics.enable` 后，违反上述规则的位置会显示波浪线，悬停可看到规则码与说明。修改 `markdownAutoSpace.preset`、`markdownAutoSpace.rules` 或 `markdownAutoSpace.units` 后，已打开文档的诊断会立即刷新。
+
+## 规则预设
+
+`markdownAutoSpace.preset` 支持四个值：
+
+- `default`：全部 MAS001–MAS009 开启，保持现有默认行为。
+- `conservative`：只开启 MAS001、MAS002、MAS003 和 MAS007，减少对标点、斜杠及百分号空格的自动改写。
+- `strict`：全部 MAS001–MAS009 开启。
+- `custom`：使用逐条规则配置，未指定的规则保持开启，兼容原有 `markdownAutoSpace.rules` 行为。
+
+预设先决定每条规则的基线，`markdownAutoSpace.rules` 中明确写出的规则再逐条覆盖。例如：
+
+```json
+{
+  "markdownAutoSpace.preset": "conservative",
+  "markdownAutoSpace.rules": {
+    "MAS005": true,
+    "MAS001": false
+  }
+}
+```
+
+此时 MAS005 会被重新开启，MAS001 会被关闭，其余规则沿用 `conservative`。切换预设后，已打开文档的诊断和后续格式化会立即使用新规则。
 
 ## Markdown 语法兼容性
 

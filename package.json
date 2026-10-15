@@ -106,9 +106,26 @@
           },
           "description": "Glob patterns for Markdown files to ignore. Patterns are relative to the containing workspace folder (including each root in a multi-root workspace); outside a workspace, they match the document path."
         },
+        "markdownAutoSpace.preset": {
+          "type": "string",
+          "enum": [
+            "default",
+            "conservative",
+            "strict",
+            "custom"
+          ],
+          "enumDescriptions": [
+            "All rules enabled (the backward-compatible default).",
+            "Enable the core boundary and unit rules (MAS001–MAS003 and MAS007).",
+            "Enable all rules, including punctuation and slash normalization.",
+            "Use markdownAutoSpace.rules directly; unspecified rules remain enabled."
+          ],
+          "default": "default",
+          "description": "Choose a rule preset. When rules are also configured, each explicit rule overrides the preset."
+        },
         "markdownAutoSpace.rules": {
           "type": "object",
-          "description": "Enable or disable each space rule by code (MAS001–MAS009). All default to true. See docs/RULES.md.",
+          "description": "Enable or disable each space rule by code (MAS001–MAS009). Explicit values override markdownAutoSpace.preset; unspecified rules use the preset (or true in custom mode). See docs/RULES.md.",
           "properties": {
             "MAS001": {
               "type": "boolean",

@@ -106,10 +106,11 @@ function codeActionKindRequested(only: vscode.CodeActionKind | undefined, kind: 
 
 function refreshDiagnosticsForConfigurationChange(event: vscode.ConfigurationChangeEvent) {
   const diagnosticsChanged = event.affectsConfiguration('markdownAutoSpace.diagnostics.enable')
+  const presetChanged = event.affectsConfiguration('markdownAutoSpace.preset')
   const rulesChanged = event.affectsConfiguration('markdownAutoSpace.rules')
   const unitsChanged = event.affectsConfiguration('markdownAutoSpace.units')
   const excludeChanged = event.affectsConfiguration('markdownAutoSpace.exclude')
-  if (!diagnosticsChanged && !rulesChanged && !unitsChanged && !excludeChanged)
+  if (!diagnosticsChanged && !presetChanged && !rulesChanged && !unitsChanged && !excludeChanged)
     return
 
   const diagnosticsEnabled = vscode.workspace

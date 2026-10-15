@@ -2,7 +2,7 @@
 import type { TextDocument } from 'vscode'
 import { Diagnostic, DiagnosticSeverity, languages as Languages, Range, RelativePattern, TextEdit, Uri, window as Window, workspace as Workspace } from 'vscode'
 import { getMarkdownSpaceViolations, processMarkdownContent } from './markdownSpace'
-import type { AutoSpaceConfigType } from './type'
+import type { AutoSpaceConfigType, MarkdownAutoSpacePreset } from './type'
 import { getRuleDocUrl, normalizeRules } from './type'
 
 interface TextChange {
@@ -125,8 +125,12 @@ export function getMarkdownAutoSpaceConfig(document?: TextDocument): AutoSpaceCo
   const exclude = Array.isArray(excludeRaw)
     ? excludeRaw.filter((pattern): pattern is string => typeof pattern === 'string')
     : []
+  const presetRaw = config.get('preset')
+  const preset: MarkdownAutoSpacePreset = presetRaw === 'conservative' || presetRaw === 'strict' || presetRaw === 'custom'
+    ? presetRaw
+    : 'default'
   const rulesRaw = config.get('rules') as Record<string, boolean> | undefined
-  const rules = normalizeRules(rulesRaw)
+  const rules = normalizeRules(rulesRaw, preset)
   const unitsRaw = config.get('units') as Record<string, unknown> | undefined
   const units = {
     additional: [
@@ -139,6 +143,7 @@ export function getMarkdownAutoSpaceConfig(document?: TextDocument): AutoSpaceCo
     formatOnSave,
     formatOnDocument,
     exclude,
+    preset,
     rules,
     units,
   }

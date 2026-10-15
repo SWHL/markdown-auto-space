@@ -35,6 +35,7 @@ Format Chinese-English spacing in Markdown for VS Code.
 - 支持 **Format Document**，也可在手动保存时自动格式化全文
 - 支持 **诊断提示（squiggles）**，像 markdownlint 一样直接标出问题位置
 - 支持 **9 条可单独开关的规则（MAS001–MAS009）**
+- 支持 `default`、`conservative`、`strict`、`custom` 四种规则预设
 - 支持按 glob 排除生成文档、CHANGELOG 或特定目录
 - 支持 markdownlint 风格的局部忽略指令，可按规则忽略块或下一行
 - 使用最小范围编辑，只提交实际发生变化的文本区间
@@ -122,7 +123,7 @@ code --install-extension SWHL.markdown-auto-space
 - `MAS008`: 度数、百分号与数字之间不应有空格
 - `MAS009`: 全形标点旁不应有空格
 
-启用诊断、切换 `markdownAutoSpace.rules` 中的任一规则，或修改 `markdownAutoSpace.units` 后，所有已打开的 Markdown 文档会立即更新诊断，无需再次编辑或保存。关闭诊断后，问题面板中的提示和编辑器波浪线会立即清空；其他配置变化不会触发全量诊断刷新。
+启用诊断、切换 `markdownAutoSpace.preset`、切换 `markdownAutoSpace.rules` 中的任一规则，或修改 `markdownAutoSpace.units` 后，所有已打开的 Markdown 文档会立即更新诊断，无需再次编辑或保存。关闭诊断后，问题面板中的提示和编辑器波浪线会立即清空；其他配置变化不会触发全量诊断刷新。
 
 ## Configuration
 
@@ -132,6 +133,7 @@ code --install-extension SWHL.markdown-auto-space
 | `markdownAutoSpace.formatOnSave` | `true` | 手动保存 Markdown 时自动修正 |
 | `markdownAutoSpace.formatOnDocument` | `false` | 执行 Format Document 时修正 |
 | `markdownAutoSpace.exclude` | `[]` | 在所有格式化、命令和诊断中排除匹配的文件 |
+| `markdownAutoSpace.preset` | `"default"` | 规则预设：`default`、`conservative`、`strict` 或 `custom` |
 | `markdownAutoSpace.rules` | 全部开启 | 按规则码单独开关 MAS001–MAS009 |
 | `markdownAutoSpace.units` | `{ "additional": [], "exclude": [] }` | 自定义 MAS007 单位；`additional` 追加默认单位，`exclude` 排除单位 |
 
@@ -145,6 +147,20 @@ code --install-extension SWHL.markdown-auto-space
   }
 }
 ```
+
+规则预设会先提供一组规则基线：`default` 和 `strict` 开启全部规则，`conservative` 只开启 MAS001–MAS003 与 MAS007，`custom` 保持逐条配置的现有行为。若同时设置 `markdownAutoSpace.preset` 和 `markdownAutoSpace.rules`，`rules` 中明确写出的规则优先，未写出的规则沿用 preset（`custom` 中未写出的规则默认为开启）。例如：
+
+```json
+{
+  "markdownAutoSpace.preset": "conservative",
+  "markdownAutoSpace.rules": {
+    "MAS005": true,
+    "MAS001": false
+  }
+}
+```
+
+上例会在保守预设基础上重新开启 MAS005，并关闭 MAS001；切换 preset 后诊断和格式化结果会立即更新。
 
 例如追加领域单位，或排除会与产品型号冲突的默认单位：
 

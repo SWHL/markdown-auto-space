@@ -19,6 +19,8 @@ export interface DigitUnitConfig {
   exclude: string[]
 }
 
+export type MarkdownAutoSpacePreset = 'default' | 'conservative' | 'strict' | 'custom'
+
 export const DEFAULT_MARKDOWN_SPACE_RULES: MarkdownSpaceRulesType = {
   chineseAlnum: true,
   chineseBacktick: true,
@@ -29,6 +31,20 @@ export const DEFAULT_MARKDOWN_SPACE_RULES: MarkdownSpaceRulesType = {
   digitUnitSpace: true,
   tightDegreePercent: true,
   noSpaceAroundCjkPunct: true,
+}
+
+/** Preset baselines. Explicit markdownAutoSpace.rules values always override these. */
+export const MARKDOWN_SPACE_PRESET_RULES: Record<Exclude<MarkdownAutoSpacePreset, 'custom'>, MarkdownSpaceRulesType> = {
+  default: DEFAULT_MARKDOWN_SPACE_RULES,
+  conservative: {
+    ...DEFAULT_MARKDOWN_SPACE_RULES,
+    chineseLinkText: false,
+    dunhaoToComma: false,
+    slashSpace: false,
+    tightDegreePercent: false,
+    noSpaceAroundCjkPunct: false,
+  },
+  strict: DEFAULT_MARKDOWN_SPACE_RULES,
 }
 
 /** 配置中的规则码（MAS001–MAS009）与内部规则键的映射 */
@@ -48,10 +64,14 @@ export const MAS_CODE_TO_RULE_KEY: Record<string, keyof MarkdownSpaceRulesType> 
  * 将配置中的规则（MAS001–MAS009）转为内部 MarkdownSpaceRulesType（可用于测试或扩展内读取配置）
  * @param rulesRaw
  */
-export function normalizeRules(rulesRaw: Record<string, boolean> | undefined): MarkdownSpaceRulesType {
+export function normalizeRules(
+  rulesRaw: Record<string, boolean> | undefined,
+  preset: MarkdownAutoSpacePreset = 'default',
+): MarkdownSpaceRulesType {
+  const base = preset === 'custom' ? DEFAULT_MARKDOWN_SPACE_RULES : (MARKDOWN_SPACE_PRESET_RULES[preset] ?? MARKDOWN_SPACE_PRESET_RULES.default)
   if (!rulesRaw)
-    return DEFAULT_MARKDOWN_SPACE_RULES
-  const rules: MarkdownSpaceRulesType = { ...DEFAULT_MARKDOWN_SPACE_RULES }
+    return { ...base }
+  const rules: MarkdownSpaceRulesType = { ...base }
   for (const [key, value] of Object.entries(rulesRaw)) {
     const internalKey = MAS_CODE_TO_RULE_KEY[key]
     if (internalKey !== undefined)
@@ -65,6 +85,7 @@ export interface AutoSpaceConfigType {
   formatOnSave: boolean
   formatOnDocument: boolean
   exclude: string[]
+  preset: MarkdownAutoSpacePreset
   rules: MarkdownSpaceRulesType
   units: DigitUnitConfig
 }
