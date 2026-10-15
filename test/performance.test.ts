@@ -1,4 +1,3 @@
-
 /* eslint-disable @typescript-eslint/no-explicit-any, @stylistic/max-statements-per-line, @stylistic/space-in-parens, no-console */
 import { performance } from 'node:perf_hooks'
 import { describe, expect, it, vi } from 'vitest'

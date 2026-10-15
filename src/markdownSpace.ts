@@ -41,7 +41,7 @@ function normalizeUnitValues(value: unknown): string[] {
 
 function overlapsProtectedModel(text: string, start: number, end: number, options: DigitUnitOptions): boolean {
   const models = normalizeUnitValues(options.protectedModels)
-  return models.some(model => {
+  return models.some((model) => {
     let offset = text.indexOf(model)
     while (offset >= 0) {
       const modelEnd = offset + model.length
@@ -101,7 +101,7 @@ export function applyDigitUnitSpace(text: string, options: DigitUnitOptions = {}
   const escapedModels = protectedModels.sort((a, b) => b.length - a.length)
     .map(model => model.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
   const modelRegex = new RegExp(escapedModels.join('|'), 'gu')
-  const masked = text.replace(modelRegex, model => {
+  const masked = text.replace(modelRegex, (model) => {
     placeholders.push(model)
     return `__MAS007_MODEL_${placeholders.length - 1}__`
   })
