@@ -11,12 +11,15 @@ const mock = vi.hoisted(() => {
     didClose: [] as Array<(document: any) => void>,
     didOpen: [] as Array<(document: any) => void>,
     didChangeConfiguration: [] as Array<(event: any) => void>,
+    didChangeActiveEditor: [] as Array<(editor: any) => void>,
   }
   const state = {
     formatOnSave: true,
     formatProviderEnabled: false,
     diagnosticsEnable: true,
     exclude: [] as string[],
+    languageIds: ['markdown'] as string[],
+    providerRegistrations: [] as Array<{ kind: string, languageId: string, dispose: ReturnType<typeof vi.fn> }>,
     textDocuments: [] as any[],
     applyEdit: vi.fn(async () => true),
     diagnosticSet: vi.fn(),
@@ -83,6 +86,11 @@ vi.mock('vscode', () => {
     mock.events[name].push(listener)
     return { dispose: vi.fn() }
   }
+  const providerRegistration = (kind: string, languageId: string) => {
+    const registration = { kind, languageId, dispose: vi.fn() }
+    mock.state.providerRegistrations.push(registration)
+    return registration
+  }
   return {
     Diagnostic,
     Position,
@@ -98,6 +106,7 @@ vi.mock('vscode', () => {
     TextEdit,
     Uri: { parse: (value: string) => value },
     window: {
+      onDidChangeActiveTextEditor: register('didChangeActiveEditor'),
       createOutputChannel: () => ({ appendLine: vi.fn() }),
       activeTextEditor: undefined,
       showWarningMessage: vi.fn(),
@@ -122,17 +131,17 @@ vi.mock('vscode', () => {
           }),
         }
       },
-      registerCodeActionsProvider: (_language: string, provider: any) => {
+      registerCodeActionsProvider: (language: string, provider: any) => {
         mock.state.codeActionProvider = provider
-        return { dispose: vi.fn() }
+        return providerRegistration('codeAction', language)
       },
-      registerCompletionItemProvider: (_language: string, provider: any) => {
+      registerCompletionItemProvider: (language: string, provider: any) => {
         mock.state.completionProvider = provider
-        return { dispose: vi.fn() }
+        return providerRegistration('completion', language)
       },
-      registerHoverProvider: (_language: string, provider: any) => {
+      registerHoverProvider: (language: string, provider: any) => {
         mock.state.hoverProvider = provider
-        return { dispose: vi.fn() }
+        return providerRegistration('hover', language)
       },
       createDiagnosticCollection: () => ({
         set: mock.state.diagnosticSet,
@@ -154,6 +163,8 @@ vi.mock('vscode', () => {
             return mock.state.diagnosticsEnable
           if (key === 'exclude')
             return mock.state.exclude
+          if (key === 'languageIds')
+            return mock.state.languageIds
           return undefined
         },
       }),
@@ -174,11 +185,11 @@ vi.mock('vscode', () => {
   }
 })
 
-function createDocument(uri = 'file:///test.md', text = '中文English') {
+function createDocument(uri = 'file:///test.md', text = '中文English', languageId = 'markdown') {
   const lines = text.split('\n')
   const lineOffsets = lines.map((_, index) => lines.slice(0, index).reduce((offset, line) => offset + line.length + 1, 0))
   return {
-    languageId: 'markdown',
+    languageId,
     uri: { fsPath: uri, toString: () => uri },
     lineCount: lines.length,
     getText: () => text,
@@ -210,10 +221,13 @@ describe('save event flow', () => {
     mock.events.didClose.length = 0
     mock.events.didOpen.length = 0
     mock.events.didChangeConfiguration.length = 0
+    mock.events.didChangeActiveEditor.length = 0
     mock.state.formatOnSave = true
     mock.state.formatProviderEnabled = false
     mock.state.diagnosticsEnable = true
     mock.state.exclude = []
+    mock.state.languageIds = ['markdown']
+    mock.state.providerRegistrations.length = 0
     mock.state.textDocuments.length = 0
     mock.state.applyEdit.mockClear()
     mock.state.diagnosticSet.mockClear()
@@ -228,8 +242,10 @@ describe('save event flow', () => {
     mock.state.commandHandlers.clear()
     mock.state.executeCommand.mockReset()
     mock.state.openedPreview = undefined
+    ;(vscode as any).window.activeTextEditor = undefined
     ;(vscode as any).window.showInformationMessage.mockReset()
     activate({ subscriptions: [] } as any)
+    mock.state.executeCommand.mockClear()
   })
 
   it('激活时注册 Markdown 格式化命令，provider 默认不注册', () => {
@@ -237,6 +253,56 @@ describe('save event flow', () => {
     expect(mock.state.commandIds).toContain('extension.markdownAutoSpacePreview')
     expect(mock.state.formattingProvider).toBeUndefined()
     expect(mock.state.codeActionProvider).toBeDefined()
+  })
+
+  it('菜单可见性跟随当前语言和 languageIds 配置，包括自定义语言', () => {
+    const document = createDocument('file:///test.custom', '中文English', 'custom-markdown')
+    ;(vscode as any).window.activeTextEditor = { document }
+    mock.events.didChangeActiveEditor[0]!({ document })
+    expect(mock.state.executeCommand).toHaveBeenLastCalledWith('setContext', 'markdownAutoSpace.supportedLanguage', false)
+
+    mock.state.languageIds = ['markdown', 'custom-markdown']
+    mock.events.didChangeConfiguration[0]!({ affectsConfiguration: (key: string) => key === 'markdownAutoSpace.languageIds' })
+    expect(mock.state.executeCommand).toHaveBeenLastCalledWith('setContext', 'markdownAutoSpace.supportedLanguage', true)
+
+    ;(vscode as any).window.activeTextEditor = undefined
+    mock.events.didChangeActiveEditor[0]!(undefined)
+    expect(mock.state.executeCommand).toHaveBeenLastCalledWith('setContext', 'markdownAutoSpace.supportedLanguage', false)
+  })
+
+  it('语言 provider 仅注册配置的语言，配置变化释放旧注册，空列表禁用全部', () => {
+    const initial = [...mock.state.providerRegistrations]
+    expect(initial.map(item => [item.kind, item.languageId])).toEqual([
+      ['codeAction', 'markdown'], ['completion', 'markdown'], ['hover', 'markdown'],
+    ])
+    mock.state.languageIds = ['mdx', 'quarto', 'rmarkdown']
+    const event = { affectsConfiguration: (key: string) => key === 'markdownAutoSpace.languageIds' }
+    mock.events.didChangeConfiguration[0]!(event)
+    for (const registration of initial)
+      expect(registration.dispose).toHaveBeenCalledTimes(1)
+    const next = mock.state.providerRegistrations.slice(initial.length)
+    for (const kind of ['codeAction', 'completion', 'hover']) {
+      expect(next.filter(item => item.kind === kind).map(item => item.languageId))
+        .toEqual(['mdx', 'quarto', 'qmd', 'rmarkdown', 'rmd'])
+    }
+    mock.state.languageIds = []
+    mock.events.didChangeConfiguration[0]!(event)
+    for (const registration of next)
+      expect(registration.dispose).toHaveBeenCalledTimes(1)
+    expect(mock.state.providerRegistrations).toHaveLength(initial.length + next.length)
+  })
+
+  it('切换到已打开的自定义语言文档时刷新 provider 注册', () => {
+    const initial = [...mock.state.providerRegistrations]
+    mock.state.languageIds = ['markdown', 'mdx']
+    const document = createDocument('file:///test.mdx', '中文English', 'mdx')
+    ;(vscode as any).window.activeTextEditor = { document }
+    mock.events.didChangeActiveEditor[0]!({ document })
+
+    for (const registration of initial)
+      expect(registration.dispose).toHaveBeenCalledTimes(1)
+    expect(mock.state.providerRegistrations.slice(initial.length).map(item => item.languageId))
+      .toEqual(['markdown', 'markdown', 'markdown', 'mdx', 'mdx', 'mdx'])
   })
 
   it('预览命令打开 diff 并确认后应用相同的最小范围编辑', async () => {
@@ -291,6 +357,39 @@ describe('save event flow', () => {
       expect.objectContaining({ newText: ' ' }),
     ])
     expect(mock.state.applyEdit).not.toHaveBeenCalled()
+  })
+
+  it('配置启用 mdx 后手动保存使用相同格式化流程', async () => {
+    mock.state.languageIds = ['markdown', 'mdx']
+    const waits: Promise<readonly any[]>[] = []
+    mock.events.willSave[0]!({
+      document: createDocument('file:///test.mdx', '中文English', 'mdx'),
+      reason: 1,
+      waitUntil: (thenable: Promise<readonly any[]>) => waits.push(thenable),
+    })
+    expect(waits).toHaveLength(1)
+    await expect(waits[0]).resolves.toEqual([expect.objectContaining({ newText: ' ' })])
+  })
+
+  it('MDX 保存、命令、provider 和诊断保护相同代码区域', async () => {
+    mock.state.languageIds = ['mdx']
+    mock.state.formatProviderEnabled = true
+    const document = createDocument('file:///test.mdx', 'export const 中文English = 1\n\n正文English {中文English}', 'mdx')
+    ;(vscode as any).window.activeTextEditor = { document }
+    mock.events.didChangeConfiguration[0]!({ affectsConfiguration: (key: string) => key.startsWith('markdownAutoSpace.') })
+    const expected = mock.state.formattingProvider.provideDocumentFormattingEdits(document)
+    expect(expected).toHaveLength(1)
+    expect(expected[0].range.start.line).toBe(2)
+    const waits: Promise<readonly any[]>[] = []
+    mock.events.willSave[0]!({ document, reason: 1, waitUntil: (edits: Promise<readonly any[]>) => waits.push(edits) })
+    await expect(waits[0]!).resolves.toEqual(expected)
+    await mock.state.commandHandlers.get('extension.markdownAutoSpace')!()
+    expect(mock.state.applyEdit).toHaveBeenCalledWith(expect.objectContaining({
+      changes: new Map([[document.uri.toString(), expected]]),
+    }))
+    const diagnostics = mock.state.diagnosticSet.mock.calls.at(-1)![1]
+    expect(diagnostics).toHaveLength(1)
+    expect(diagnostics[0].range.start.line).toBe(2)
   })
 
   it('自动保存和失焦保存不调用 waitUntil', () => {

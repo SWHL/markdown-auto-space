@@ -1,5 +1,7 @@
 # Markdown Auto Space 规则说明
 
+最低支持 VS Code v1.74.0（桌面版和 Web 版），与扩展清单中的 `engines.vscode: ^1.74.0` 一致。
+
 本扩展在编辑器中会以规则码（MAS001–MAS009）标注违反处，与 markdownlint 的 MDxxx 用法一致。下表为规则码与配置键、说明的对应关系。
 
 ## 与《中文文案排版指北》空格小节的对照
@@ -339,9 +341,23 @@
 
 关闭后，该规则既不会在保存 / 格式化时生效，也不会在编辑器中显示对应诊断。
 
+## 语言范围
+
+`markdownAutoSpace.languageIds` 控制扩展处理哪些 VS Code 语言 ID，默认只有 `markdown`。例如需要处理 MDX, Quarto 和 R Markdown 时可配置为：
+
+```json
+{
+  "markdownAutoSpace.languageIds": ["markdown", "mdx", "quarto", "rmarkdown"]
+}
+```
+
+扩展同时兼容 `quarto` / `qmd` 和 `rmarkdown` / `rmd` 两组语言 ID。语言模式由 VS Code 及对应的语言扩展提供，本扩展不注册语言或按文件扩展名自动切换模式。修改配置会立即更新 provider、命令菜单和已打开文档的诊断；设为 `[]` 可禁用所有语言。
+
+各语言共用 Markdown 规则及保护逻辑。MDX 中的 JSX 标签属性、普通 `{...}` 表达式、跨行表达式、字符串、注释、正则以及 `import` / `export` 语句都会被保护；表达式和代码中的中文混排标识符不会被空格规则改写。表达式前后的正文仍会继续格式化。
+
 ## 排除文件
 
-`markdownAutoSpace.exclude` 接受 VS Code glob 数组。匹配的 Markdown 文件会完全跳过：手动保存格式化、扩展命令、标准 Format Document 提供器和诊断都不会处理它们。
+`markdownAutoSpace.exclude` 接受 VS Code glob 数组。匹配的文档会完全跳过：手动保存格式化、扩展命令、标准 Format Document 提供器和诊断都不会处理它们。
 
 ```json
 {

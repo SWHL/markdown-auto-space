@@ -1,4 +1,5 @@
 import type { MarkdownSpaceRulesType } from './type'
+import { protectMdxContent } from './mdx'
 
 /**
  * Markdown 中文与英文/数字间加空格
@@ -866,7 +867,10 @@ export function processMarkdownContent(
   content: string,
   rules: MarkdownSpaceRulesType = DEFAULT_RULES,
   units: DigitUnitOptions = {},
+  languageId = 'markdown',
 ): string {
+  const protection = languageId === 'mdx' ? protectMdxContent(content) : undefined
+  content = protection?.text ?? content
   const lines = content.split(/\r\n|\n/)
   const lineBreaks = content.match(/\r\n|\n/g) ?? []
   const processingInfo = getLineProcessingInfo(content, rules)
@@ -882,7 +886,8 @@ export function processMarkdownContent(
     newLines.push(addSpacesBetweenChineseAndAlnum(line, processingInfo.rulesByLine.get(lineIndex) ?? rules, units))
   }
 
-  return newLines.map((line, index) => line + (lineBreaks[index] ?? '')).join('')
+  const result = newLines.map((line, index) => line + (lineBreaks[index] ?? '')).join('')
+  return protection ? protection.restore(result) : result
 }
 
 export interface MarkdownSpaceViolation {
@@ -903,7 +908,10 @@ export function getMarkdownSpaceViolations(
   content: string,
   rules: MarkdownSpaceRulesType = DEFAULT_RULES,
   units: DigitUnitOptions = {},
+  languageId = 'markdown',
 ): MarkdownSpaceViolation[] {
+  if (languageId === 'mdx')
+    content = protectMdxContent(content).text
   const lines = content.split('\n')
   const processingInfo = getLineProcessingInfo(content, rules)
   const out: MarkdownSpaceViolation[] = []

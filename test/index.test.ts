@@ -11,9 +11,10 @@ import {
 } from '../src/markdownSpace'
 import { DEFAULT_MARKDOWN_SPACE_RULES, MANUAL_SAVE_REASON, MARKDOWN_SPACE_PRESET_RULES, RULES_DOC_BASE_URL, getRuleDocUrl, normalizeRules, shouldRunFormatOnSave } from '../src/type'
 import type { MarkdownSpaceRulesType } from '../src/type'
-import { getMarkdownAutoSpaceConfig, getMarkdownAutoSpaceDiagnostics, getMarkdownAutoSpaceEdits, isExcluded, shouldProcessFile } from '../src/utils'
+import { getMarkdownAutoSpaceChangeCount, getMarkdownAutoSpaceConfig, getMarkdownAutoSpaceDiagnostics, getMarkdownAutoSpaceEdits, getMarkdownAutoSpaceRuleHitCounts, isExcluded, shouldProcessFile } from '../src/utils'
 
 const vscodeMock = vi.hoisted(() => ({
+  languageIds: ['markdown'] as string[],
   exclude: [] as string[],
   units: undefined as Record<string, unknown> | undefined,
   preset: 'default' as string,
@@ -76,6 +77,8 @@ vi.mock('vscode', () => {
             return true
           if (key === 'exclude')
             return vscodeMock.exclude
+          if (key === 'languageIds')
+            return vscodeMock.languageIds
           if (key === 'units')
             return vscodeMock.units
           return undefined
@@ -523,6 +526,97 @@ describe('getMarkdownSpaceViolations', () => {
   })
 })
 
+describe('MDX code protection', () => {
+  const mdxCases = [
+    '{中文English}{其他English}',
+    '{中文English} + {其他English}',
+    '{中文English}',
+    '{value > 10 ? 中文English : 其他English}',
+    '{({ nested: { 中文English: 10Gbps } })}',
+    '{"带有}花括号English" + 中文English}',
+    '{`模板${`嵌套${中文English}`}10Gbps`}',
+    '{/}/.test(中文English) ? 中文English : null}',
+    '{/[{}]/.test(中文English) ? 中文English : null}',
+    '{value / 10 + 中文English}',
+    '{/* } 中文English 10Gbps */ 中文English}',
+    '{// } 中文English\n中文English}',
+    '{\n({ nested: {\n中文English: 10Gbps\n} })\n}',
+    '{\n`多行}模板\n中文English10Gbps`\n}',
+    '{/*\n}\n中文English\n*/ 中文English}',
+    '{[配置import](url) + 中文English + "15 % ，中文"}',
+    '<Component label="{" value={中文English > 0 ? 中文English : 其他English} />',
+    '<Component\nlabel="{"\nvalue={中文English}\n/>',
+    '<><Component value={中文English} /></>',
+  ]
+
+  it.each(mdxCases)('保护表达式 %s，同时格式化两侧正文并保留诊断偏移', (code) => {
+    const input = `前文English ${code} 后文English`
+    const output = processMarkdownContent(input, DEFAULT_MARKDOWN_SPACE_RULES, {}, 'mdx')
+    expect(output).toBe(`前文 English ${code} 后文 English`)
+    expect(processMarkdownContent(output, DEFAULT_MARKDOWN_SPACE_RULES, {}, 'mdx')).toBe(output)
+    const violations = getMarkdownSpaceViolations(input, DEFAULT_MARKDOWN_SPACE_RULES, {}, 'mdx')
+    expect(violations).toHaveLength(2)
+    expect(violations.map(v => v.lineIndex)).toEqual([0, input.split('\n').length - 1])
+    const last = violations[1]!
+    expect(input.split('\n')[last.lineIndex]!.slice(last.start, last.start + last.length)).toBe('文E')
+  })
+
+  it.each([
+    'export const 中文English = 1',
+    'import { 中文English } from "pkg"',
+    'import\n{ 中文English }\nfrom "pkg"',
+    'export const 配置English = {\n nested: {\n中文English: 10Gbps\n },\n最后English: 15 %\n}',
+    'export default (\n<Component label="中文English" />\n)',
+    'export const 配置English = `第一行English\n\n第二行English`',
+    'export function 中文English() {\n/*\n}\n\n中文English\n*/\nreturn /}/.test(中文English)\n}',
+  ])('保护完整 ESM 块 %s，空行后恢复正文处理', (code) => {
+    const input = `${code}\n\n正文English`
+    expect(processMarkdownContent(input, DEFAULT_MARKDOWN_SPACE_RULES, {}, 'mdx')).toBe(`${code}\n\n正文 English`)
+    expect(getMarkdownSpaceViolations(input, DEFAULT_MARKDOWN_SPACE_RULES, {}, 'mdx').map(v => v.lineIndex))
+      .toEqual([input.split('\n').length - 1])
+  })
+
+  it('未闭合表达式保守保护到 EOF，原有 Markdown 行为不变', () => {
+    const input = '正文English {\n中文English\n仍然English'
+    expect(processMarkdownContent(input, DEFAULT_MARKDOWN_SPACE_RULES, {}, 'mdx'))
+      .toBe('正文 English {\n中文English\n仍然English')
+    expect(getMarkdownSpaceViolations(input, DEFAULT_MARKDOWN_SPACE_RULES, {}, 'mdx')).toHaveLength(1)
+    expect(processMarkdownContent('{中文English}\nimport 中文English'))
+      .toBe('{中文 English}\nimport 中文 English')
+  })
+
+  it('不改变已有 HTML 与 JSX 块保护', () => {
+    const code = '<Component value={中文English > 0}>\n块内中文English\n</Component>\n<div>\nHTML中文English\n</div>'
+    const input = `${code}\n正文English`
+    expect(processMarkdownContent(input, DEFAULT_MARKDOWN_SPACE_RULES, {}, 'mdx')).toBe(`${code}\n正文 English`)
+    expect(getMarkdownSpaceViolations(input, DEFAULT_MARKDOWN_SPACE_RULES, {}, 'mdx').map(v => v.lineIndex)).toEqual([6])
+  })
+
+  it('围栏、front matter、转义和行内代码里的花括号不影响后续正文', () => {
+    const input = '---\nvalue: {\n---\n```js\n{\n```\n`{` \\{中文English\n正文English'
+    const output = processMarkdownContent(input, DEFAULT_MARKDOWN_SPACE_RULES, {}, 'mdx')
+    expect(output).toBe('---\nvalue: {\n---\n```js\n{\n```\n`{` \\{中文 English\n正文 English')
+    expect(getMarkdownSpaceViolations(input, DEFAULT_MARKDOWN_SPACE_RULES, {}, 'mdx').map(v => v.lineIndex)).toEqual([6, 7])
+  })
+
+  it('文档层最小编辑、诊断、计数与原始混合换行使用同一 MDX 保护', () => {
+    vscodeMock.languageIds = ['markdown', 'mdx']
+    try {
+      const input = 'export const 中文English = {\r\n中文English: 1\n}\r\n\n前文English {中文English} 后文English'
+      const document = createMockDocument(input, 'mdx')
+      const edits = getMarkdownAutoSpaceEdits(document, input)
+      expect(edits).toHaveLength(2)
+      expect(applyEdits(input, document, edits)).toBe(input.replace('前文English', '前文 English').replace('后文English', '后文 English'))
+      expect(getMarkdownAutoSpaceDiagnostics(document, input)).toHaveLength(2)
+      expect(getMarkdownAutoSpaceChangeCount(document, input)).toBe(2)
+      expect(getMarkdownAutoSpaceRuleHitCounts(document, input)).toEqual({ MAS001: 2 })
+    }
+    finally {
+      vscodeMock.languageIds = ['markdown']
+    }
+  })
+})
+
 describe('shouldSkipLine', () => {
   it('YAML 分隔线与围栏行视为跳过（由 processMarkdownContent 处理）', () => {
     expect(shouldSkipLine('---')).toBe(true)
@@ -849,6 +943,20 @@ describe('markdownAutoSpace.exclude', () => {
 })
 
 describe('getMarkdownAutoSpaceConfig', () => {
+  it('默认仅启用 markdown，可配置 mdx/quarto/rmarkdown 等语言 ID', () => {
+    expect(getMarkdownAutoSpaceConfig().languageIds).toEqual(['markdown'])
+    vscodeMock.languageIds = ['markdown', 'mdx', 'quarto', 'rmarkdown', 'mdx', ' ']
+    try {
+      expect(getMarkdownAutoSpaceConfig().languageIds).toEqual(['markdown', 'mdx', 'quarto', 'qmd', 'rmarkdown', 'rmd'])
+      expect(shouldProcessFile(createMockDocument('中文English', 'mdx'))).toBe(true)
+      expect(shouldProcessFile(createMockDocument('中文English', 'qmd'))).toBe(true)
+      expect(shouldProcessFile(createMockDocument('中文English', 'rmd'))).toBe(true)
+      expect(getMarkdownAutoSpaceEdits(createMockDocument('中文English', 'mdx'), '中文English')).toBeDefined()
+    }
+    finally {
+      vscodeMock.languageIds = ['markdown']
+    }
+  })
   it('返回标准格式化 provider 开关', () => {
     const config = getMarkdownAutoSpaceConfig()
     expect(config.formatProviderEnabled).toBe(false)

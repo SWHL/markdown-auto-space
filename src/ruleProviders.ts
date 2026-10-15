@@ -1,6 +1,7 @@
 import * as vscode from 'vscode'
 import { getRuleDocUrl } from './type'
 import { RULE_DIAGNOSTIC_MAP } from './markdownSpace'
+import { shouldProcessFile } from './utils'
 
 const IGNORE_DIRECTIVE_RE = /^\s*<!--\s*(?:markdown-auto-space|mas)-(?:disable-next-line|disable|enable)\s+(?:MAS\d{3}\s+)*(?:[A-Z0-9]*)$/
 
@@ -35,7 +36,7 @@ function createRuleCompletionItems(document: vscode.TextDocument, position: vsco
 }
 
 export function getRuleCompletionItems(document: vscode.TextDocument, position: vscode.Position): vscode.CompletionItem[] {
-  if (document.languageId !== 'markdown')
+  if (!shouldProcessFile(document))
     return []
   const before = document.lineAt(position.line).text.slice(0, position.character)
   const prefixMatch = /^\s*(<!--\s*(?:markdown-auto-space|mas)-)([a-z-]*)$/.exec(before)
@@ -46,7 +47,7 @@ export function getRuleCompletionItems(document: vscode.TextDocument, position: 
 }
 
 export function getRuleHover(document: vscode.TextDocument, position: vscode.Position): vscode.Hover | undefined {
-  if (document.languageId !== 'markdown')
+  if (!shouldProcessFile(document))
     return undefined
   const line = document.lineAt(position.line).text
   if (!/^\s*<!--\s*(?:markdown-auto-space|mas)-(?:disable-next-line|disable|enable)(?:\s+[^<>]*?)?\s*-->\s*$/.test(line))

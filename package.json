@@ -23,10 +23,10 @@
   "browser": "./dist/web/extension.js",
   "icon": "res/icon.png",
   "engines": {
-    "vscode": "^1.69.0"
+    "vscode": "^1.74.0"
   },
   "activationEvents": [
-    "onLanguage:markdown",
+    "onStartupFinished",
     "onCommand:extension.markdownAutoSpace",
     "onCommand:extension.markdownAutoSpacePreview"
   ],
@@ -47,34 +47,34 @@
       "commandPalette": [
         {
           "command": "extension.markdownAutoSpace",
-          "when": "editorLangId == markdown"
+          "when": "markdownAutoSpace.supportedLanguage"
         },
         {
           "command": "extension.markdownAutoSpacePreview",
-          "when": "editorLangId == markdown"
+          "when": "markdownAutoSpace.supportedLanguage"
         }
       ],
       "editor/title": [
         {
           "command": "extension.markdownAutoSpace",
-          "when": "editorLangId == markdown",
+          "when": "markdownAutoSpace.supportedLanguage",
           "group": "1_modification"
         },
         {
           "command": "extension.markdownAutoSpacePreview",
-          "when": "editorLangId == markdown",
+          "when": "markdownAutoSpace.supportedLanguage",
           "group": "1_modification"
         }
       ],
       "editor/context": [
         {
           "command": "extension.markdownAutoSpace",
-          "when": "editorLangId == markdown",
+          "when": "markdownAutoSpace.supportedLanguage",
           "group": "1_modification"
         },
         {
           "command": "extension.markdownAutoSpacePreview",
-          "when": "editorLangId == markdown",
+          "when": "markdownAutoSpace.supportedLanguage",
           "group": "1_modification"
         }
       ]
@@ -82,6 +82,16 @@
     "configuration": {
       "title": "Markdown Auto Space configuration",
       "properties": {
+        "markdownAutoSpace.languageIds": {
+          "type": "array",
+          "default": [
+            "markdown"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "description": "Language IDs processed by Markdown Auto Space. Markdown is enabled by default; add mdx, quarto, rmarkdown, or other Markdown-like language IDs as needed."
+        },
         "markdownAutoSpace.diagnostics.enable": {
           "type": "boolean",
           "default": true,
@@ -227,7 +237,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.9.1",
-    "@types/vscode": "^1.69.0",
+    "@types/vscode": "^1.74.0",
     "@vscode/vsce": "^3.2.1",
     "bumpp": "^9.8.1",
     "esbuild": "^0.24.0",

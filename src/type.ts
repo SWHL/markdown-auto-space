@@ -21,6 +21,9 @@ export interface DigitUnitConfig {
 
 export type MarkdownAutoSpacePreset = 'default' | 'conservative' | 'strict' | 'custom'
 
+/** Preserve the historical behavior unless users opt into Markdown-like languages. */
+export const DEFAULT_LANGUAGE_IDS = ['markdown']
+
 export const DEFAULT_MARKDOWN_SPACE_RULES: MarkdownSpaceRulesType = {
   chineseAlnum: true,
   chineseBacktick: true,
@@ -82,6 +85,8 @@ export function normalizeRules(
 
 /** 扩展配置（从 VS Code 读取）；rules 由 normalizeRules 填充为完整对象 */
 export interface AutoSpaceConfigType {
+  /** Language IDs processed by the extension. */
+  languageIds: string[]
   formatOnSave: boolean
   /** Whether the VS Code standard Format Document provider is enabled. */
   formatProviderEnabled: boolean

@@ -1,5 +1,5 @@
 import * as vscode from 'vscode'
-import { getMarkdownAutoSpaceChangeCount, getMarkdownAutoSpaceConfig, getMarkdownAutoSpaceEdits, getMarkdownAutoSpaceRuleHitCounts, isExcluded, shouldProcessFile } from './utils'
+import { getMarkdownAutoSpaceChangeCount, getMarkdownAutoSpaceConfig, getMarkdownAutoSpaceEdits, getMarkdownAutoSpaceRuleHitCounts, isExcluded, isSupportedLanguage, shouldProcessFile } from './utils'
 import { shouldRunFormatOnSave } from './type'
 import { createDiagnosticsController } from './diagnostics'
 import { getRuleCompletionItems, getRuleHover } from './ruleProviders'
@@ -100,7 +100,8 @@ function refreshDiagnosticsForConfigurationChange(event: vscode.ConfigurationCha
   const rulesChanged = event.affectsConfiguration('markdownAutoSpace.rules')
   const unitsChanged = event.affectsConfiguration('markdownAutoSpace.units')
   const excludeChanged = event.affectsConfiguration('markdownAutoSpace.exclude')
-  if (!diagnosticsChanged && !presetChanged && !rulesChanged && !unitsChanged && !excludeChanged)
+  const languageIdsChanged = event.affectsConfiguration('markdownAutoSpace.languageIds')
+  if (!diagnosticsChanged && !presetChanged && !rulesChanged && !unitsChanged && !excludeChanged && !languageIdsChanged)
     return
 
   const diagnosticsEnabled = vscode.workspace
@@ -111,10 +112,8 @@ function refreshDiagnosticsForConfigurationChange(event: vscode.ConfigurationCha
     return
   }
 
-  for (const doc of vscode.workspace.textDocuments) {
-    if (doc.languageId === 'markdown')
-      diagnostics.flush(doc)
-  }
+  for (const doc of vscode.workspace.textDocuments)
+    diagnostics.flush(doc)
 }
 
 /**
@@ -128,6 +127,12 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(statusBarItem)
   log('Extension activated')
 
+  const refreshCommandContext = () => {
+    const document = vscode.window.activeTextEditor?.document
+    void vscode.commands.executeCommand('setContext', 'markdownAutoSpace.supportedLanguage', !!document && isSupportedLanguage(document))
+  }
+  refreshCommandContext()
+
   const markdownAutoSpaceListener = vscode.commands.registerCommand('extension.markdownAutoSpace', async () => {
     log('Command: Format Document')
     const editor = vscode.window.activeTextEditor
@@ -140,13 +145,13 @@ export function activate(context: vscode.ExtensionContext) {
     const document = editor.document
     log(`  Document: ${document.uri.fsPath} languageId=${document.languageId}`)
     if (!shouldProcessFile(document)) {
-      if (document.languageId === 'markdown' && isExcluded(document)) {
+      if (isSupportedLanguage(document) && isExcluded(document)) {
         log('  Skipped: current file is excluded')
         showStatus('Markdown Auto Space: Skipped excluded file.')
       }
       else {
-        log('  Skipped: current file is not Markdown')
-        void vscode.window.showWarningMessage(`Markdown Auto Space: Markdown files only (current language: ${document.languageId}).`)
+        log('  Skipped: current language is not configured')
+        void vscode.window.showWarningMessage(`Markdown Auto Space: Language '${document.languageId}' is not enabled in markdownAutoSpace.languageIds.`)
       }
       return
     }
@@ -181,10 +186,10 @@ export function activate(context: vscode.ExtensionContext) {
 
     const document = editor.document
     if (!shouldProcessFile(document)) {
-      if (document.languageId === 'markdown' && isExcluded(document))
+      if (isSupportedLanguage(document) && isExcluded(document))
         showStatus('Markdown Auto Space: Skipped excluded file.')
       else
-        void vscode.window.showWarningMessage(`Markdown Auto Space: Markdown files only (current language: ${document.languageId}).`)
+        void vscode.window.showWarningMessage(`Markdown Auto Space: Language '${document.languageId}' is not enabled in markdownAutoSpace.languageIds.`)
       return
     }
 
@@ -243,31 +248,52 @@ export function activate(context: vscode.ExtensionContext) {
   // Only register the standard providers when enabled. A registered provider
   // that returns [] can otherwise win provider selection while appearing to do
   // nothing, and can prevent another Markdown formatter from being selected.
-  let formattingProvider: vscode.Disposable | undefined
+  let formattingProviders: vscode.Disposable[] = []
+  let providerLanguageIds: string[] = []
+  const getProviderDocuments = (document?: vscode.TextDocument) => {
+    const documents = [...vscode.workspace.textDocuments]
+    if (document && !documents.includes(document))
+      documents.push(document)
+    return documents
+  }
+  const getProviderLanguageIds = (document?: vscode.TextDocument) => {
+    const documents = getProviderDocuments(document)
+    const configs = documents.length > 0
+      ? documents.map(target => getMarkdownAutoSpaceConfig(target))
+      : [getMarkdownAutoSpaceConfig()]
+    return [...new Set(configs.flatMap(config => config.languageIds))]
+  }
   const disposeFormattingProviders = () => {
-    formattingProvider?.dispose()
-    formattingProvider = undefined
+    formattingProviders.forEach(provider => provider.dispose())
+    formattingProviders = []
+    providerLanguageIds = []
   }
   const refreshFormattingProviders = (document?: vscode.TextDocument) => {
-    const enabled = getMarkdownAutoSpaceConfig(document).formatProviderEnabled
+    const documents = getProviderDocuments(document)
+    const enabled = documents.length > 0
+      ? documents.some(target => getMarkdownAutoSpaceConfig(target).formatProviderEnabled)
+      : getMarkdownAutoSpaceConfig().formatProviderEnabled
     if (!enabled) {
       disposeFormattingProviders()
       return
     }
-    if (formattingProvider)
+    const languageIds = getProviderLanguageIds(document)
+    if (providerLanguageIds.join('\0') === languageIds.join('\0'))
       return
-    formattingProvider = vscode.languages.registerDocumentFormattingEditProvider('markdown', {
+    disposeFormattingProviders()
+    providerLanguageIds = languageIds
+    formattingProviders = languageIds.map(languageId => vscode.languages.registerDocumentFormattingEditProvider(languageId, {
       provideDocumentFormattingEdits: (target) => {
         if (!getMarkdownAutoSpaceConfig(target).formatProviderEnabled)
           return []
         return getMarkdownAutoSpaceEdits(target, target.getText()) ?? []
       },
-    })
+    }))
   }
   refreshFormattingProviders(vscode.window.activeTextEditor?.document)
   context.subscriptions.push({ dispose: disposeFormattingProviders })
 
-  const codeActionProvider = vscode.languages.registerCodeActionsProvider('markdown', {
+  const codeActionProvider: vscode.CodeActionProvider = {
     provideCodeActions: (document, _range, context) => {
       if (!shouldProcessFile(document))
         return []
@@ -301,23 +327,28 @@ export function activate(context: vscode.ExtensionContext) {
       }
       return actions
     },
-  }, {
-    providedCodeActionKinds: [vscode.CodeActionKind.QuickFix, vscode.CodeActionKind.SourceFixAll],
-  })
-  context.subscriptions.push(codeActionProvider)
-
-  const registerCompletion = vscode.languages.registerCompletionItemProvider
-  if (typeof registerCompletion === 'function') {
-    context.subscriptions.push(registerCompletion.call(vscode.languages, 'markdown', {
-      provideCompletionItems: getRuleCompletionItems,
-    }, '<', '-', ' '))
   }
-  const registerHover = vscode.languages.registerHoverProvider
-  if (typeof registerHover === 'function') {
-    context.subscriptions.push(registerHover.call(vscode.languages, 'markdown', {
-      provideHover: getRuleHover,
-    }))
+  const providerDisposables: vscode.Disposable[] = []
+  const registerLanguageProviders = (document?: vscode.TextDocument) => {
+    providerDisposables.splice(0).forEach(provider => provider.dispose())
+    const languageIds = getProviderLanguageIds(document)
+    for (const languageId of languageIds) {
+      providerDisposables.push(vscode.languages.registerCodeActionsProvider(languageId, codeActionProvider, {
+        providedCodeActionKinds: [vscode.CodeActionKind.QuickFix, vscode.CodeActionKind.SourceFixAll],
+      }))
+      if (typeof vscode.languages.registerCompletionItemProvider === 'function')
+        providerDisposables.push(vscode.languages.registerCompletionItemProvider(languageId, { provideCompletionItems: getRuleCompletionItems }, '<', '-', ' '))
+      if (typeof vscode.languages.registerHoverProvider === 'function')
+        providerDisposables.push(vscode.languages.registerHoverProvider(languageId, { provideHover: getRuleHover }))
+    }
   }
+  registerLanguageProviders(vscode.window.activeTextEditor?.document)
+  context.subscriptions.push({ dispose: () => providerDisposables.splice(0).forEach(provider => provider.dispose()) })
+  context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor((editor) => {
+    refreshCommandContext()
+    registerLanguageProviders(editor?.document)
+    refreshFormattingProviders(editor?.document)
+  }))
 
   // 诊断：在编辑器中标注违反「中英文加空格」规则的位置（类似 markdownlint）
   const diagnosticCollection = vscode.languages.createDiagnosticCollection('markdown-auto-space')
@@ -326,11 +357,13 @@ export function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(
     vscode.workspace.onDidOpenTextDocument((doc) => {
+      refreshCommandContext()
+      registerLanguageProviders(doc)
       refreshFormattingProviders(doc)
       diagnostics.update(doc)
     }),
     vscode.workspace.onDidChangeTextDocument((e) => {
-      if (e.document.languageId !== 'markdown')
+      if (!isSupportedLanguage(e.document))
         return
       diagnostics.schedule(e.document)
     }),
@@ -339,13 +372,21 @@ export function activate(context: vscode.ExtensionContext) {
       diagnostics.flush(doc)
     }),
     vscode.workspace.onDidChangeConfiguration((event) => {
-      if (event.affectsConfiguration('markdownAutoSpace.formatProvider.enable'))
+      if (event.affectsConfiguration('markdownAutoSpace.languageIds')) {
+        refreshCommandContext()
+        registerLanguageProviders(vscode.window.activeTextEditor?.document)
+      }
+      if (event.affectsConfiguration('markdownAutoSpace.formatProvider.enable')
+        || event.affectsConfiguration('markdownAutoSpace.languageIds'))
         refreshFormattingProviders(vscode.window.activeTextEditor?.document)
       refreshDiagnosticsForConfigurationChange(event)
     }),
     vscode.workspace.onDidCloseTextDocument((doc) => {
       diagnostics.cancel(doc)
       diagnosticCollection.delete(doc.uri)
+      const activeDocument = vscode.window.activeTextEditor?.document
+      registerLanguageProviders(activeDocument)
+      refreshFormattingProviders(activeDocument)
     }),
   )
   // 已打开的文件初次诊断

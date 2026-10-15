@@ -3,7 +3,7 @@ import type { TextDocument } from 'vscode'
 import { Diagnostic, DiagnosticSeverity, languages as Languages, Range, RelativePattern, TextEdit, Uri, window as Window, workspace as Workspace } from 'vscode'
 import { getMarkdownSpaceViolations, processMarkdownContent } from './markdownSpace'
 import type { AutoSpaceConfigType, MarkdownAutoSpacePreset } from './type'
-import { getRuleDocUrl, normalizeRules } from './type'
+import { DEFAULT_LANGUAGE_IDS, getRuleDocUrl, normalizeRules } from './type'
 
 interface TextChange {
   start: number
@@ -119,6 +119,26 @@ function getMinimalTextEdits(
  */
 export function getMarkdownAutoSpaceConfig(document?: TextDocument): AutoSpaceConfigType {
   const config = Workspace.getConfiguration('markdownAutoSpace', document?.uri)
+  const languageIdsRaw = config.get<unknown>('languageIds')
+  const configuredLanguageIds = Array.isArray(languageIdsRaw)
+    ? [...new Set(languageIdsRaw
+        .filter((languageId): languageId is string => typeof languageId === 'string')
+        .map(languageId => languageId.trim())
+        .filter(Boolean))]
+    : [...DEFAULT_LANGUAGE_IDS]
+  // Language IDs differ between the common Quarto and R Markdown extensions:
+  // accept both the product name and the short IDs used by some grammars.
+  const languageIds = [...new Set(configuredLanguageIds.flatMap((languageId) => {
+    if (languageId === 'quarto')
+      return ['quarto', 'qmd']
+    if (languageId === 'qmd')
+      return ['qmd', 'quarto']
+    if (languageId === 'rmarkdown')
+      return ['rmarkdown', 'rmd']
+    if (languageId === 'rmd')
+      return ['rmd', 'rmarkdown']
+    return [languageId]
+  }))]
   const formatOnSave = config.get('formatOnSave') as boolean
   const formatProviderEnabled = config.get('formatProvider.enable') as boolean
   const excludeRaw = config.get<unknown>('exclude')
@@ -140,6 +160,7 @@ export function getMarkdownAutoSpaceConfig(document?: TextDocument): AutoSpaceCo
     exclude: Array.isArray(unitsRaw?.exclude) ? unitsRaw.exclude.filter((unit): unit is string => typeof unit === 'string') : [],
   }
   return {
+    languageIds,
     formatOnSave,
     formatProviderEnabled,
     exclude,
@@ -147,6 +168,11 @@ export function getMarkdownAutoSpaceConfig(document?: TextDocument): AutoSpaceCo
     rules,
     units,
   }
+}
+
+/** Whether a document language ID is enabled for Markdown Auto Space. */
+export function isSupportedLanguage(document: TextDocument): boolean {
+  return getMarkdownAutoSpaceConfig(document).languageIds.includes(document.languageId)
 }
 
 /**
@@ -175,9 +201,9 @@ export function isExcluded(document: TextDocument): boolean {
   })
 }
 
-/** Only process Markdown documents that do not match an exclusion glob. */
+/** Only process configured Markdown-like documents that are not excluded. */
 export function shouldProcessFile(document: TextDocument): boolean {
-  return document.languageId === 'markdown' && !isExcluded(document)
+  return isSupportedLanguage(document) && !isExcluded(document)
 }
 
 /**
@@ -193,7 +219,7 @@ export function getMarkdownAutoSpaceEdits(
     return undefined
 
   const { rules, units } = getMarkdownAutoSpaceConfig(document)
-  const updatedText = processMarkdownContent(text, rules, units)
+  const updatedText = processMarkdownContent(text, rules, units, document.languageId)
   return getMinimalTextEdits(document, text, updatedText)
 }
 
@@ -202,7 +228,7 @@ export function getMarkdownAutoSpaceChangeCount(document: TextDocument, text: st
   if (!shouldProcessFile(document))
     return 0
   const { rules, units } = getMarkdownAutoSpaceConfig(document)
-  return getMinimalTextChanges(text, processMarkdownContent(text, rules, units)).length
+  return getMinimalTextChanges(text, processMarkdownContent(text, rules, units, document.languageId)).length
 }
 
 /** Return the number of current violations for each MAS rule. */
@@ -211,7 +237,7 @@ export function getMarkdownAutoSpaceRuleHitCounts(document: TextDocument, text: 
     return {}
   const { rules, units } = getMarkdownAutoSpaceConfig(document)
   const counts: Record<string, number> = {}
-  for (const violation of getMarkdownSpaceViolations(text, rules, units))
+  for (const violation of getMarkdownSpaceViolations(text, rules, units, document.languageId))
     counts[violation.code] = (counts[violation.code] ?? 0) + 1
   return counts
 }
@@ -234,7 +260,7 @@ export function getMarkdownAutoSpaceDiagnostics(
     return []
 
   const { rules, units } = getMarkdownAutoSpaceConfig(document)
-  const violations = getMarkdownSpaceViolations(text, rules, units)
+  const violations = getMarkdownSpaceViolations(text, rules, units, document.languageId)
   const diagnostics: Diagnostic[] = []
   for (const v of violations) {
     if (v.lineIndex >= document.lineCount)
@@ -272,6 +298,6 @@ export function markdownAutoSpace(text: string) {
     return
 
   const { rules, units } = getMarkdownAutoSpaceConfig(document)
-  const updatedText = processMarkdownContent(text, rules, units)
+  const updatedText = processMarkdownContent(text, rules, units, document.languageId)
   return getMinimalTextEdits(document, text, updatedText)
 }
