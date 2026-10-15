@@ -242,6 +242,7 @@
     "publish": "vsce publish --no-dependencies",
     "test": "vitest run test/index.test.ts test/save-flow.test.ts",
     "test:integration": "vitest run test/save-flow.test.ts",
+    "test:benchmark": "vitest run test/performance.test.ts --reporter=verbose",
     "test:smoke": "pnpm build && pnpm build:web && vitest run test/build-smoke.test.ts",
     "typecheck": "tsc --noEmit",
     "release": "bumpp && pnpm run publish"

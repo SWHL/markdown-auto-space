@@ -1,6 +1,9 @@
 import type * as vscode from 'vscode'
 import { getMarkdownAutoSpaceDiagnostics, shouldProcessFile } from './utils'
 
+/** Delay used to coalesce diagnostics while a document is being edited. */
+export const DIAGNOSTICS_DEBOUNCE_MS = 300
+
 export function createDiagnosticsController(collection: vscode.DiagnosticCollection) {
   const timers = new Map<string, ReturnType<typeof setTimeout>>()
 
@@ -29,7 +32,7 @@ export function createDiagnosticsController(collection: vscode.DiagnosticCollect
     timers.set(key, setTimeout(() => {
       timers.delete(key)
       update(document)
-    }, 300))
+    }, DIAGNOSTICS_DEBOUNCE_MS))
   }
 
   const flush = (document: vscode.TextDocument) => {

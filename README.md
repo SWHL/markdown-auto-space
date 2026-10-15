@@ -256,6 +256,10 @@ VS Code 的标准 `Format Document` 是另一条路径。默认不会注册本�
 
 ## Development
 
+### 性能基准
+
+项目包含固定的 10 万行 Markdown 大文件基准，记录格式化耗时、编辑数量、堆内存增量，并覆盖 MDX/大文档保护扫描。运行 `pnpm test:benchmark` 查看指标并验证回归阈值；诊断 debounce 的 300 ms 契约也在该套件中锁定。详细阈值和解释见 [docs/PERFORMANCE.md](./docs/PERFORMANCE.md)。
+
 ```bash
 pnpm lint
 pnpm typecheck

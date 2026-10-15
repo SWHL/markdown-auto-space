@@ -93,6 +93,11 @@ function getMinimalTextChanges(original: string, updated: string): TextChange[] 
   return changes
 }
 
+/** Count the minimal edits needed to transform formatted text back into a document. */
+export function getTextChangeCount(original: string, updated: string): number {
+  return getMinimalTextChanges(original, updated).length
+}
+
 function getMinimalTextEdits(
   document: TextDocument,
   original: string,
