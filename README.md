@@ -196,6 +196,7 @@ code --install-extension SWHL.markdown-auto-space
 | 版本 | 摘要 |
 |------|------|
 | **未发布** | 重构保存格式化流程；保存时通过 `waitUntil` 返回编辑并由 VS Code 保存事务应用；全文、选区和命令格式化改用最小范围编辑；保留 LF / CRLF 换行并补充多行、多处变化、无变化及混合换行测试；诊断开关、规则或 MAS007 单位配置变化后立即更新已打开文档的诊断 |
+| **0.0.9** | 修复保存格式化后残留诊断；统一命令入口与英文提示；扩展 Markdown 语法兼容性并完善配置变化后的诊断刷新 |
 | **0.0.8** | 重写 Marketplace 文案与关键词；新增更接近真实 VS Code 的横向宣传图；优化商店展示与 VSIX 体积 |
 | **0.0.7** | 优化格式化稳定性与选区处理；新增自动发版工作流；精简 CI 与发布链路 |
 | **0.0.6** | 新增 MAS007–MAS009：数字与单位、度 / 百分号、全形标点旁空格规则 |
@@ -213,7 +214,7 @@ pnpm build
 pnpm package:vsix
 ```
 
-`pnpm package:vsix` 会生成 `markdown-auto-space-0.0.8.vsix`。在 VS Code 扩展面板中选择“从 VSIX 安装”，安装后执行 `Developer: Reload Window`，确保测试的是最新构建。
+`pnpm package:vsix` 会生成带当前 `package.json` 版本号的 `.vsix` 文件（例如 `markdown-auto-space-0.0.9.vsix`）。在 VS Code 扩展面板中选择“从 VSIX 安装”，安装后执行 `Developer: Reload Window`，确保测试的是最新构建。
 
 针对保存格式化流程，可以在 Extension Development Host 中验证：打开 Markdown 文件，输入 `中文English`、多行混排文本以及带 CRLF 的内容后手动保存。预期只修改实际需要加空格或删空格的位置，代码块内容和换行符保持不变；启用其他 Markdown 格式化插件时，也不会由本扩展全文覆盖文档。
 
