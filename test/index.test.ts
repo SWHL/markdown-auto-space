@@ -17,6 +17,7 @@ const vscodeMock = vi.hoisted(() => ({
   exclude: [] as string[],
   units: undefined as Record<string, unknown> | undefined,
   preset: 'default' as string,
+  formatProviderEnabled: false,
   workspaceFolder: undefined as { name: string, uri: { path: string } } | undefined,
   match: vi.fn(() => 0),
 }))
@@ -65,8 +66,8 @@ vi.mock('vscode', () => {
         get: (key: string) => {
           if (key === 'formatOnSave')
             return true
-          if (key === 'formatOnDocument')
-            return false
+          if (key === 'formatProvider.enable')
+            return vscodeMock.formatProviderEnabled
           if (key === 'rules')
             return undefined
           if (key === 'preset')
@@ -848,13 +849,23 @@ describe('markdownAutoSpace.exclude', () => {
 })
 
 describe('getMarkdownAutoSpaceConfig', () => {
-  it('返回格式化文档开关，供标准 formatting provider 使用', () => {
+  it('返回标准格式化 provider 开关', () => {
     const config = getMarkdownAutoSpaceConfig()
-    expect(config.formatOnDocument).toBe(false)
+    expect(config.formatProviderEnabled).toBe(false)
     expect(config.formatOnSave).toBe(true)
     expect(config.exclude).toEqual([])
     expect(config.preset).toBe('default')
     expect('spaceType' in config).toBe(false)
+  })
+
+  it('读取标准格式化 provider 开关', () => {
+    vscodeMock.formatProviderEnabled = true
+    try {
+      expect(getMarkdownAutoSpaceConfig().formatProviderEnabled).toBe(true)
+    }
+    finally {
+      vscodeMock.formatProviderEnabled = false
+    }
   })
 
   it.each([

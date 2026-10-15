@@ -14,7 +14,7 @@ const mock = vi.hoisted(() => {
   }
   const state = {
     formatOnSave: true,
-    formatOnDocument: false,
+    formatProviderEnabled: false,
     diagnosticsEnable: true,
     exclude: [] as string[],
     textDocuments: [] as any[],
@@ -23,7 +23,6 @@ const mock = vi.hoisted(() => {
     diagnosticDelete: vi.fn(),
     diagnosticClear: vi.fn(),
     formattingProvider: undefined as any,
-    rangeFormattingProvider: undefined as any,
     codeActionProvider: undefined as any,
     commandId: undefined as string | undefined,
     commandIds: [] as string[],
@@ -117,11 +116,11 @@ vi.mock('vscode', () => {
       match: () => mock.state.exclude.length ? 1 : 0,
       registerDocumentFormattingEditProvider: (_language: string, provider: any) => {
         mock.state.formattingProvider = provider
-        return { dispose: vi.fn() }
-      },
-      registerDocumentRangeFormattingEditProvider: (_language: string, provider: any) => {
-        mock.state.rangeFormattingProvider = provider
-        return { dispose: vi.fn() }
+        return {
+          dispose: vi.fn(() => {
+            mock.state.formattingProvider = undefined
+          }),
+        }
       },
       registerCodeActionsProvider: (_language: string, provider: any) => {
         mock.state.codeActionProvider = provider
@@ -149,8 +148,8 @@ vi.mock('vscode', () => {
         get: (key: string) => {
           if (key === 'formatOnSave')
             return mock.state.formatOnSave
-          if (key === 'formatOnDocument')
-            return mock.state.formatOnDocument
+          if (key === 'formatProvider.enable')
+            return mock.state.formatProviderEnabled
           if (key === 'diagnostics.enable')
             return mock.state.diagnosticsEnable
           if (key === 'exclude')
@@ -212,7 +211,7 @@ describe('save event flow', () => {
     mock.events.didOpen.length = 0
     mock.events.didChangeConfiguration.length = 0
     mock.state.formatOnSave = true
-    mock.state.formatOnDocument = false
+    mock.state.formatProviderEnabled = false
     mock.state.diagnosticsEnable = true
     mock.state.exclude = []
     mock.state.textDocuments.length = 0
@@ -222,7 +221,7 @@ describe('save event flow', () => {
     mock.state.diagnosticClear.mockClear()
     mock.state.completionProvider = undefined
     mock.state.hoverProvider = undefined
-    mock.state.rangeFormattingProvider = undefined
+    mock.state.formattingProvider = undefined
     mock.state.codeActionProvider = undefined
     mock.state.commandId = undefined
     mock.state.commandIds.length = 0
@@ -233,11 +232,10 @@ describe('save event flow', () => {
     activate({ subscriptions: [] } as any)
   })
 
-  it('激活时注册 Markdown 格式化命令和 VS Code providers', () => {
+  it('激活时注册 Markdown 格式化命令，provider 默认不注册', () => {
     expect(mock.state.commandIds).toContain('extension.markdownAutoSpace')
     expect(mock.state.commandIds).toContain('extension.markdownAutoSpacePreview')
-    expect(mock.state.formattingProvider).toBeDefined()
-    expect(mock.state.rangeFormattingProvider).toBeDefined()
+    expect(mock.state.formattingProvider).toBeUndefined()
     expect(mock.state.codeActionProvider).toBeDefined()
   })
 
@@ -398,21 +396,43 @@ describe('save event flow', () => {
   })
 
   it('标准 Format Document 提供器跳过排除文档', () => {
-    mock.state.formatOnDocument = true
+    mock.state.formatProviderEnabled = true
     mock.state.exclude = ['**/*.md']
+    ;(vscode as any).window.activeTextEditor = { document: createDocument() }
+    mock.events.didChangeConfiguration[0]!({
+      affectsConfiguration: (key: string) => key === 'markdownAutoSpace.formatProvider.enable',
+    })
     expect(mock.state.formattingProvider.provideDocumentFormattingEdits(createDocument())).toEqual([])
   })
 
-  it('标准 Format Selection 只返回选区内的编辑', () => {
-    mock.state.formatOnDocument = true
-    const text = '中文English\n中文English'
-    const document = createDocument('file:///test.md', text)
-    const edits = mock.state.rangeFormattingProvider.provideDocumentRangeFormattingEdits(document, {
-      start: { line: 1, character: 0 },
-      end: { line: 1, character: text.length },
+  it('标准 Format Document provider 默认不注册，开启后动态注册', () => {
+    expect(mock.state.formattingProvider).toBeUndefined()
+    ;(vscode as any).window.activeTextEditor = { document: createDocument() }
+    mock.state.formatProviderEnabled = true
+    mock.events.didChangeConfiguration[0]!({
+      affectsConfiguration: (key: string) => key === 'markdownAutoSpace.formatProvider.enable',
     })
-    expect(edits).toHaveLength(1)
-    expect(edits[0].range.start.line).toBe(1)
+    expect(mock.state.formattingProvider).toBeDefined()
+  })
+
+  it('关闭 provider 设置后释放标准格式化 provider', () => {
+    ;(vscode as any).window.activeTextEditor = { document: createDocument() }
+    mock.state.formatProviderEnabled = true
+    mock.events.didChangeConfiguration[0]!({
+      affectsConfiguration: (key: string) => key === 'markdownAutoSpace.formatProvider.enable',
+    })
+    mock.state.formatProviderEnabled = false
+    mock.events.didChangeConfiguration[0]!({
+      affectsConfiguration: (key: string) => key === 'markdownAutoSpace.formatProvider.enable',
+    })
+    expect(mock.state.formattingProvider).toBeUndefined()
+  })
+
+  it('provider 关闭不影响扩展专用 Format Document 命令', async () => {
+    const document = createDocument()
+    ;(vscode as any).window.activeTextEditor = { document }
+    await mock.state.commandHandlers.get('extension.markdownAutoSpace')!()
+    expect(mock.state.applyEdit).toHaveBeenCalledWith(expect.objectContaining({ changes: expect.any(Map) }))
   })
 
   it('Quick Fix 只修复当前诊断，Fix All 修复全文', () => {

@@ -120,7 +120,7 @@ function getMinimalTextEdits(
 export function getMarkdownAutoSpaceConfig(document?: TextDocument): AutoSpaceConfigType {
   const config = Workspace.getConfiguration('markdownAutoSpace', document?.uri)
   const formatOnSave = config.get('formatOnSave') as boolean
-  const formatOnDocument = config.get('formatOnDocument') as boolean
+  const formatProviderEnabled = config.get('formatProvider.enable') as boolean
   const excludeRaw = config.get<unknown>('exclude')
   const exclude = Array.isArray(excludeRaw)
     ? excludeRaw.filter((pattern): pattern is string => typeof pattern === 'string')
@@ -141,7 +141,7 @@ export function getMarkdownAutoSpaceConfig(document?: TextDocument): AutoSpaceCo
   }
   return {
     formatOnSave,
-    formatOnDocument,
+    formatProviderEnabled,
     exclude,
     preset,
     rules,

@@ -83,7 +83,8 @@ export function normalizeRules(
 /** 扩展配置（从 VS Code 读取）；rules 由 normalizeRules 填充为完整对象 */
 export interface AutoSpaceConfigType {
   formatOnSave: boolean
-  formatOnDocument: boolean
+  /** Whether the VS Code standard Format Document provider is enabled. */
+  formatProviderEnabled: boolean
   exclude: string[]
   preset: MarkdownAutoSpacePreset
   rules: MarkdownSpaceRulesType

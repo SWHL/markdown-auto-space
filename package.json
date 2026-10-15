@@ -92,10 +92,10 @@
           "default": true,
           "description": "Apply space rules when you manually save (e.g. Ctrl+S). Does not run on auto-save, so diagnostics (squiggles) stay until you save."
         },
-        "markdownAutoSpace.formatOnDocument": {
+        "markdownAutoSpace.formatProvider.enable": {
           "type": "boolean",
           "default": false,
-          "description": "Apply spacing rules when the Format Document command runs."
+          "description": "Enable Markdown Auto Space for VS Code's standard Format Document command. The extension-specific 'Markdown Auto Space: Format Document' command is always available."
         },
         "markdownAutoSpace.exclude": {
           "type": "array",

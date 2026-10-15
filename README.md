@@ -102,6 +102,10 @@ code --install-extension SWHL.markdown-auto-space
 - 也可以从编辑器标题栏或右键菜单运行；右键菜单中的命令位于修改 / 格式化区域，靠近 VS Code 内置的 `Format Document`
 - 格式化完成后，状态栏显示实际修改数量；没有变化时仅显示短暂状态提示，不弹出通知
 
+这是扩展专用命令，始终直接应用 Markdown Auto Space 规则，不受标准格式化提供器开关影响。
+
+VS Code 的标准 `Format Document` 是另一条路径。默认不会注册本扩展的格式化 provider，避免与其他 Markdown formatter 争用；将 `markdownAutoSpace.formatProvider.enable` 设为 `true` 后，才会注册标准格式化 provider。关闭设置时会立即释放 provider，因此 VS Code 不会把本扩展当作可用的标准 formatter。设置变更无需重载窗口。
+
 ### 3. Preview changes
 
 - 命令面板运行 `Markdown Auto Space: Preview Changes`
@@ -131,7 +135,7 @@ code --install-extension SWHL.markdown-auto-space
 |------|------|------|
 | `markdownAutoSpace.diagnostics.enable` | `true` | 显示规则提示波浪线 |
 | `markdownAutoSpace.formatOnSave` | `true` | 手动保存 Markdown 时自动修正 |
-| `markdownAutoSpace.formatOnDocument` | `false` | 执行 Format Document 时修正 |
+| `markdownAutoSpace.formatProvider.enable` | `false` | 启用本扩展对 VS Code 标准 `Format Document` 的格式化 provider；扩展专用命令不受影响 |
 | `markdownAutoSpace.exclude` | `[]` | 在所有格式化、命令和诊断中排除匹配的文件 |
 | `markdownAutoSpace.preset` | `"default"` | 规则预设：`default`、`conservative`、`strict` 或 `custom` |
 | `markdownAutoSpace.rules` | 全部开启 | 按规则码单独开关 MAS001–MAS009 |
@@ -186,7 +190,7 @@ code --install-extension SWHL.markdown-auto-space
 }
 ```
 
-排除项使用 VS Code glob 语法，并同时作用于手动保存格式化、`Markdown Auto Space: Format Document` 命令、标准 Format Document 提供器和诊断。工作区内的路径相对文件所属的工作区根目录匹配；多根工作区会分别以各自根目录为基准，因此同一模式对每个根一致生效。工作区外的文档按完整文档路径匹配。VS Code Web 的虚拟工作区 URI 同样以所属工作区根为基准；不属于任何工作区的非文件 URI 通常只会在其 URI 路径匹配模式时被排除。
+排除项使用 VS Code glob 语法，并同时作用于手动保存格式化、`Markdown Auto Space: Format Document` 命令、启用后的标准 Format Document provider 和诊断。工作区内的路径相对文件所属的工作区根目录匹配；多根工作区会分别以各自根目录为基准，因此同一模式对每个根一致生效。工作区外的文档按完整文档路径匹配。VS Code Web 的虚拟工作区 URI 同样以所属工作区根为基准；不属于任何工作区的非文件 URI 通常只会在其 URI 路径匹配模式时被排除。
 
 ## Behavior details
 

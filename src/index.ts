@@ -61,16 +61,6 @@ function getFormatEdits(document: vscode.TextDocument): vscode.TextEdit[] {
   }
 }
 
-function getFormatEditsInRange(document: vscode.TextDocument, range: vscode.Range): vscode.TextEdit[] {
-  return getFormatEdits(document).filter((edit) => {
-    const startsAfterRange = edit.range.start.line > range.start.line
-      || (edit.range.start.line === range.start.line && edit.range.start.character >= range.start.character)
-    const endsBeforeRange = edit.range.end.line < range.end.line
-      || (edit.range.end.line === range.end.line && edit.range.end.character <= range.end.character)
-    return startsAfterRange && endsBeforeRange
-  })
-}
-
 function rangesOverlap(left: vscode.Range, right: vscode.Range): boolean {
   const startsBeforeEnd = left.start.line < right.end.line
     || (left.start.line === right.end.line && left.start.character <= right.end.character)
@@ -250,28 +240,32 @@ export function activate(context: vscode.ExtensionContext) {
         event.waitUntil(Promise.resolve(getFormatEdits(event.document)))
     }),
   )
-  // 监听格式化文档命令
-  const formattingProvider = vscode.languages.registerDocumentFormattingEditProvider('markdown', {
-    provideDocumentFormattingEdits: (document) => {
-      const { formatOnDocument } = getMarkdownAutoSpaceConfig(document)
-      if (!formatOnDocument)
-        return []
-
-      const text = document.getText()
-      return getMarkdownAutoSpaceEdits(document, text) ?? []
-    },
-  })
-  context.subscriptions.push(formattingProvider)
-
-  const rangeFormattingProvider = vscode.languages.registerDocumentRangeFormattingEditProvider('markdown', {
-    provideDocumentRangeFormattingEdits: (document, range) => {
-      const { formatOnDocument } = getMarkdownAutoSpaceConfig(document)
-      if (!formatOnDocument)
-        return []
-      return getFormatEditsInRange(document, range)
-    },
-  })
-  context.subscriptions.push(rangeFormattingProvider)
+  // Only register the standard providers when enabled. A registered provider
+  // that returns [] can otherwise win provider selection while appearing to do
+  // nothing, and can prevent another Markdown formatter from being selected.
+  let formattingProvider: vscode.Disposable | undefined
+  const disposeFormattingProviders = () => {
+    formattingProvider?.dispose()
+    formattingProvider = undefined
+  }
+  const refreshFormattingProviders = (document?: vscode.TextDocument) => {
+    const enabled = getMarkdownAutoSpaceConfig(document).formatProviderEnabled
+    if (!enabled) {
+      disposeFormattingProviders()
+      return
+    }
+    if (formattingProvider)
+      return
+    formattingProvider = vscode.languages.registerDocumentFormattingEditProvider('markdown', {
+      provideDocumentFormattingEdits: (target) => {
+        if (!getMarkdownAutoSpaceConfig(target).formatProviderEnabled)
+          return []
+        return getMarkdownAutoSpaceEdits(target, target.getText()) ?? []
+      },
+    })
+  }
+  refreshFormattingProviders(vscode.window.activeTextEditor?.document)
+  context.subscriptions.push({ dispose: disposeFormattingProviders })
 
   const codeActionProvider = vscode.languages.registerCodeActionsProvider('markdown', {
     provideCodeActions: (document, _range, context) => {
@@ -332,6 +326,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(
     vscode.workspace.onDidOpenTextDocument((doc) => {
+      refreshFormattingProviders(doc)
       diagnostics.update(doc)
     }),
     vscode.workspace.onDidChangeTextDocument((e) => {
@@ -344,6 +339,8 @@ export function activate(context: vscode.ExtensionContext) {
       diagnostics.flush(doc)
     }),
     vscode.workspace.onDidChangeConfiguration((event) => {
+      if (event.affectsConfiguration('markdownAutoSpace.formatProvider.enable'))
+        refreshFormattingProviders(vscode.window.activeTextEditor?.document)
       refreshDiagnosticsForConfigurationChange(event)
     }),
     vscode.workspace.onDidCloseTextDocument((doc) => {
