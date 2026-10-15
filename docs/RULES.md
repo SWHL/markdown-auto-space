@@ -19,6 +19,22 @@
 
 行内代码、链接边界等仍由 MAS002, MAS003, MAS006 等配合；指北中「超连结之间增加空格」属争议项，本扩展未单独做规则。
 
+## CLI 配置
+
+命令行工具与 VS Code 共用下文的规则和保护逻辑。可在项目根目录放置 `.markdown-auto-space.json`（或 `markdown-auto-space.config.json`），也可使用 `--config` 指定文件：
+
+```json
+{
+  "preset": "default",
+  "rules": { "MAS001": true, "MAS007": false },
+  "units": { "additional": ["rpm"], "exclude": ["V"] },
+  "exclude": ["docs/generated/**"],
+  "fileExtensions": [".md", ".mdx"]
+}
+```
+
+运行 `markdown-auto-space <file|directory|glob> --check` 可在 CI 中检查格式；存在待修改内容时退出码为 `1`。使用 `--write` 写回文件，使用 `--diff` 输出统一 diff。
+
 ---
 
 | 规则码 | 配置键（`markdownAutoSpace.rules`） | 说明 |

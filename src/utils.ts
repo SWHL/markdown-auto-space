@@ -1,7 +1,8 @@
 // import type { TextEditorEdit } from 'vscode'
 import type { TextDocument } from 'vscode'
 import { Diagnostic, DiagnosticSeverity, languages as Languages, Range, RelativePattern, TextEdit, Uri, window as Window, workspace as Workspace } from 'vscode'
-import { getMarkdownSpaceViolations, processMarkdownContent } from './markdownSpace'
+import { getMarkdownSpaceViolations } from './markdownSpace'
+import { formatMarkdownText } from './core'
 import type { AutoSpaceConfigType, MarkdownAutoSpacePreset } from './type'
 import { DEFAULT_FILE_EXTENSIONS, getRuleDocUrl, normalizeRules } from './type'
 
@@ -224,7 +225,7 @@ export function getMarkdownAutoSpaceEdits(
     return undefined
 
   const { rules, units } = getMarkdownAutoSpaceConfig(document)
-  const updatedText = processMarkdownContent(text, rules, units, getDocumentLanguage(document))
+  const updatedText = formatMarkdownText(text, { rules: rules as unknown as Record<string, boolean>, units, languageId: getDocumentLanguage(document) })
   return getMinimalTextEdits(document, text, updatedText)
 }
 
@@ -233,7 +234,7 @@ export function getMarkdownAutoSpaceChangeCount(document: TextDocument, text: st
   if (!shouldProcessFile(document))
     return 0
   const { rules, units } = getMarkdownAutoSpaceConfig(document)
-  return getMinimalTextChanges(text, processMarkdownContent(text, rules, units, getDocumentLanguage(document))).length
+  return getMinimalTextChanges(text, formatMarkdownText(text, { rules: rules as unknown as Record<string, boolean>, units, languageId: getDocumentLanguage(document) })).length
 }
 
 /** Return the number of current violations for each MAS rule. */
@@ -303,6 +304,6 @@ export function markdownAutoSpace(text: string) {
     return
 
   const { rules, units } = getMarkdownAutoSpaceConfig(document)
-  const updatedText = processMarkdownContent(text, rules, units, getDocumentLanguage(document))
+  const updatedText = formatMarkdownText(text, { rules: rules as unknown as Record<string, boolean>, units, languageId: getDocumentLanguage(document) })
   return getMinimalTextEdits(document, text, updatedText)
 }

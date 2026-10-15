@@ -3,7 +3,6 @@
   "name": "markdown-auto-space",
   "displayName": "Markdown Auto Space",
   "version": "0.0.9",
-  "private": true,
   "packageManager": "pnpm@9.14.1",
   "description": "Auto add space between Chinese and English in Markdown when you save file",
   "author": "SWHL<liekkaskono@163.com>",
@@ -21,6 +20,9 @@
   ],
   "main": "./dist/index.js",
   "browser": "./dist/web/extension.js",
+  "bin": {
+    "markdown-auto-space": "./dist/cli.js"
+  },
   "icon": "res/icon.png",
   "engines": {
     "vscode": "^1.74.0"
@@ -230,7 +232,8 @@
     }
   },
   "scripts": {
-    "build": "tsup src/index.ts --external vscode",
+    "build": "tsup --config tsup.config.ts",
+    "build:cli": "tsup src/cli.ts --format cjs --external vscode",
     "build:web": "node scripts/build-web.mjs",
     "dev": "pnpm build --watch",
     "lint": "eslint .",
@@ -240,7 +243,7 @@
     "version:check": "node scripts/check-version.mjs",
     "vscode:prepublish": "pnpm build && pnpm build:web",
     "publish": "vsce publish --no-dependencies",
-    "test": "vitest run test/index.test.ts test/save-flow.test.ts",
+    "test": "vitest run test/index.test.ts test/save-flow.test.ts test/cli.test.ts",
     "test:integration": "vitest run test/save-flow.test.ts",
     "test:benchmark": "vitest run test/performance.test.ts --reporter=verbose",
     "test:smoke": "pnpm build && pnpm build:web && vitest run test/build-smoke.test.ts",

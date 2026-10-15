@@ -92,6 +92,18 @@ code --install-extension SWHL.markdown-auto-space
 
 ## Usage
 
+### CLI
+
+命令行工具与 VS Code 共用同一套规则和保护逻辑：
+
+```bash
+npx markdown-auto-space README.md --write
+npx markdown-auto-space "docs/**/*.md" --check
+npx markdown-auto-space . --diff
+```
+
+输入可以是单文件、目录或 glob。`--write` 写回文件，`--check` 只检查并在存在待修改内容时返回退出码 `1`，`--diff` 输出统一 diff。默认读取当前目录的 `.markdown-auto-space.json` 或 `markdown-auto-space.config.json`，也可通过 `--config path/to/config.json` 指定。配置文件支持 `preset`、`rules`、`units`、`exclude` 和 `fileExtensions`，键名与 VS Code 设置一致。
+
 ### 1. Save to fix
 
 默认开启 `markdownAutoSpace.formatOnSave`，你手动保存 Markdown 文件时会自动修正空格问题。
