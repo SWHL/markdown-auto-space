@@ -69,4 +69,23 @@ describe('CLI', () => {
     expect(output).toContain('-中文English')
     expect(output).toContain(`+${formatMarkdownText('中文English')}`)
   })
+
+  it('prints file, line, column and MAS rule code in check mode', async () => {
+    const root = await fixture()
+    const file = join(root, 'diagnostic.md')
+    await writeFile(file, '中文English\n')
+    const originalWrite = process.stdout.write
+    let output = ''
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk)
+      return true
+    }) as typeof process.stdout.write
+    try {
+      expect(await runCli(['--check', file])).toBe(1)
+    }
+    finally {
+      process.stdout.write = originalWrite
+    }
+    expect(output).toContain('diagnostic.md:1:2: MAS001')
+  })
 })

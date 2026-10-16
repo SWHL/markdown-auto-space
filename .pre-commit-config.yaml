@@ -1,0 +1,9 @@
+repos:
+  - repo: local
+    hooks:
+      - id: markdown-auto-space
+        name: Markdown Auto Space
+        entry: node dist/cli.js --check --staged
+        language: system
+        pass_filenames: false
+        files: \.(md|mdx|qmd|rmd)$
