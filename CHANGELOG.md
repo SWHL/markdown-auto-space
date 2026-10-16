@@ -8,7 +8,7 @@
 
 - **新增 CLI**：抽取无编辑器依赖的 `formatMarkdownText` 纯文本入口，并提供支持单文件、目录和 glob 的 `markdown-auto-space` CLI。CLI 支持 `--write`、`--check`、`--diff`、JSON 配置文件、规则 / 排除项 / 单位配置；VS Code 与 CLI 共用格式化和保护逻辑。
 - **最低编辑器版本**：最低支持版本提高至 VS Code v1.74.0（桌面版和 Web 版），与 `package.json` 的 `engines.vscode: ^1.74.0` 一致。
-- **可配置 Markdown 类语言**：新增 `markdownAutoSpace.languageIds`，默认仍为 `["markdown"]`；可显式启用 `mdx`、`quarto` / `qmd`、`rmarkdown` / `rmd` 等语言 ID。保存事务、命令、诊断和 provider 共用配置；配置变化后即时重新注册 provider、刷新菜单及诊断。扩展改为启动完成后激活，以支持自定义语言 ID。
+- **可配置 Markdown 文件后缀**：新增 `markdownAutoSpace.fileExtensions`，默认仍为 `[".md"]`；可显式启用 `.txt`、`.mdx`、`.qmd`、`.rmd` 等后缀。保存事务、命令、诊断和 provider 共用配置；配置变化后即时重新注册 provider、刷新菜单及诊断。扩展改为启动完成后激活，以支持自定义文件后缀。
 - **收敛安装包内容**：排除本地 `.vscode` 配置和 `dist` 下的手动测试文档。
 - **新增格式化预览**：新增 `Markdown Auto Space: Preview Changes` 命令，通过 VS Code diff 展示最小范围编辑、总修改数和 MAS 规则命中数，确认后才应用变更。
 - **增强 Markdown 语法兼容性**：支持引用块、嵌套列表、表格单元格、引用式链接和自动链接；新增跨行 HTML/HTML 注释、JSX/MDX、模板表达式及转义字符保护，并对未闭合行内代码、链接、引号和模板采用保守处理。实现继续使用轻量状态扫描，不引入 AST 运行时依赖。

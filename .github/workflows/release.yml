@@ -24,8 +24,8 @@ jobs:
           node-version: 18.x
           cache: pnpm
 
-      - name: Sync package version from tag
-        run: pnpm version:sync -- "${GITHUB_REF_NAME}"
+      - name: Set package version from tag in CI workspace
+        run: pnpm version:set -- "${GITHUB_REF_NAME}"
 
       - name: Install
         run: pnpm install --frozen-lockfile

@@ -239,7 +239,7 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "package:vsix": "vsce package --no-dependencies",
-    "version:sync": "node scripts/sync-version.mjs",
+    "version:set": "node scripts/set-package-version.mjs",
     "version:check": "node scripts/check-version.mjs",
     "vscode:prepublish": "pnpm build && pnpm build:web",
     "publish": "vsce publish --no-dependencies",

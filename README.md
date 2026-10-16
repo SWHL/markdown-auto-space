@@ -100,53 +100,9 @@ code --install-extension SWHL.markdown-auto-space
 npx markdown-auto-space README.md --write
 npx markdown-auto-space "docs/**/*.md" --check
 npx markdown-auto-space . --diff
-npx markdown-auto-space --check --changed       # 工作树中仅检查变更文件
-npx markdown-auto-space --check --staged        # 仅检查暂存文件（适合 pre-commit）
 ```
 
 输入可以是单文件、目录或 glob。`--write` 写回文件，`--check` 只检查并在存在待修改内容时返回退出码 `1`，`--diff` 输出统一 diff。默认读取当前目录的 `.markdown-auto-space.json` 或 `markdown-auto-space.config.json`，也可通过 `--config path/to/config.json` 指定。配置文件支持 `preset`、`rules`、`units`、`exclude` 和 `fileExtensions`，键名与 VS Code 设置一致。
-
-检查失败时 CLI、GitHub Action 和 pre-commit 会输出 `文件:行:列: MASxxx`，规则码与 VS Code 诊断一致。仓库内的 `.pre-commit-config.yaml` 使用构建后的 `dist/cli.js`；首次使用或更新依赖后先运行 `pnpm build:cli`，然后安装 [pre-commit](https://pre-commit.com/) 并运行 `pre-commit install`。
-
-其他项目可以安装 CLI 包后直接复制以下 hook（无需 pnpm）：
-
-```bash
-npm install --save-dev markdown-auto-space
-```
-
-```yaml
-repos:
-  - repo: local
-    hooks:
-      - id: markdown-auto-space
-        name: Markdown Auto Space
-        entry: markdown-auto-space --check --staged
-        language: system
-        pass_filenames: false
-        files: \.(md|mdx|qmd|rmd)$
-```
-
-这里的 `--staged` 会读取 Git 暂存区，因此与提交内容一致；`pass_filenames: false` 避免 pre-commit 传入的文件列表覆盖 CLI 自己的变更文件筛选。GitHub Action 可在 CI 中用以下最小步骤阻止未格式化 Markdown 合并：
-
-最小项目配置（保存为 `.markdown-auto-space.json`）如下，CLI 和 VS Code 会读取同样的规则开关：
-
-```json
-{
-  "rules": { "MAS001": true }
-}
-```
-
-```yaml
-- uses: actions/checkout@v4
-- uses: pnpm/action-setup@v4
-- uses: actions/setup-node@v4
-  with: { node-version: 18, cache: pnpm }
-- run: pnpm install --frozen-lockfile
-- run: pnpm build
-- run: node dist/cli.js --check --changed
-```
-
-本仓库的 CI 会按 PR / push 的提交范围传入变更文件；本地 hook 会读取 Git 暂存区内容并执行 `node dist/cli.js --check --staged`。其他项目安装 npm 包后使用上面的 `markdown-auto-space --check --staged` 即可。
 
 ### 1. Save to fix
 
@@ -298,6 +254,8 @@ VS Code 的标准 `Format Document` 是另一条路径。默认不会注册本�
 更完整的规则说明、输入输出示例和与《中文文案排版指北》的对应关系见 [docs/RULES.md](./docs/RULES.md)。
 
 ## Changelog
+
+正式发布使用 Git tag 作为唯一版本来源。推送 `vX.Y.Z` tag 后，Release CI 只在临时构建工作区中将 `package.json` 版本设置为 `X.Y.Z` 并生成对应版本的 VSIX，不会修改或提交仓库中的 `package.json`、`CHANGELOG.md`。因此仓库里的版本号只是开发基线，最终安装包版本以 tag 为准；本节维护面向用户的发版说明。
 
 | 版本 | 摘要 |
 |------|------|
