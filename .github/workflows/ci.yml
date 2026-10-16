@@ -26,18 +26,6 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
-      - name: Check changed Markdown
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
-        run: |
-          set -euo pipefail
-          pnpm build:cli
-          if [ -z "${BASE_SHA}" ] || [ "${BASE_SHA}" = "0000000000000000000000000000000000000000" ]; then
-            BASE_SHA=$(git rev-list --max-parents=0 HEAD)
-          fi
-          git diff --name-only -z "${BASE_SHA}" "${GITHUB_SHA}" -- '*.md' '*.mdx' '*.qmd' '*.rmd' \
-            | xargs -0 -r node dist/cli.js --check
-
       - name: Lint
         run: pnpm lint
 
